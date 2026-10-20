@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "atlassian": {
+      "type": "http",
+      "url": "https://mcp.atlassian.com/v1/mcp"
+    },
+    "slack": {
+      "command": "npx",
+      "args": ["-y", "@zencoderai/slack-mcp-server"],
+      "env": {
+        "SLACK_BOT_TOKEN": "${SLACK_BOT_TOKEN}",
+        "SLACK_TEAM_ID": "T0BNQS0TX40",
+        "SLACK_CHANNEL_IDS": "C0BMYDZLVND"
+      }
+    }
+  }
+}

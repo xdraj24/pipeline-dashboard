@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skills Dashboard · Reviews</title>
+<link rel="stylesheet" href="/styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+</head>
+<body data-page="reviews">
+<header class="top">
+  <div class="brand">Skills dashboard <span id="repo" class="muted"></span></div>
+  <nav class="nav"><a href="/">Board</a><a href="/history">History</a><a href="/reviews" class="on">Reviews <span id="queue-count" class="muted"></span></a></nav>
+  <div class="status-row" id="status-row"></div>
+  <div class="actions">
+    <button id="refresh" title="Drop the PR cache and refetch">Refresh</button>
+  </div>
+</header>
+
+<section class="filters">
+  <span class="muted small">filter</span>
+  <button class="chip" data-filter="small" title="At most 200 changed lines and 10 files">small</button>
+  <button class="chip" data-filter="frontend" title="frontend/ carries ≥ 90% of the frontend+backend lines">frontend focused</button>
+  <button class="chip" data-filter="backend" title="backend/ carries ≥ 90% of the frontend+backend lines">backend focused</button>
+  <label class="muted small"><input type="checkbox" id="hide-bots"> hide bot authors</label>
+  <span id="batch" class="batch"></span>
+</section>
+
+<main>
+  <div>
+    <section class="group">
+      <h2>Waiting for a first review <span id="queue-n" class="muted"></span></h2>
+      <p class="muted small">Open, non-draft PRs by other developers that no human has reviewed or commented on. Bot and CI comments do not count.</p>
+      <div id="queue" class="tickets"></div>
+    </section>
+    <section class="group">
+      <h2>You commented, waiting on the author <span id="mine-n" class="muted"></span></h2>
+      <div id="mine" class="tickets"></div>
+    </section>
+    <section class="group">
+      <details><summary>Reviewed by someone else, not by you <span id="others-n" class="muted"></span></summary><div id="others" class="tickets"></div></details>
+    </section>
+    <section class="group">
+      <h2>Review skills running <span id="sessions-n" class="muted"></span></h2>
+      <p class="muted small">Claude Code sessions, interactive or headless, whose last command was a <span class="mono">/w-2x</span> skill, read from the session transcripts under <span class="mono">~/.claude/projects</span>. A run is "finished" once the session's turn ended.</p>
+      <div id="sessions"></div>
+    </section>
+    <section class="group">
+      <h2>History: approved by you <span id="approved-n" class="muted"></span></h2>
+      <div id="approved"></div>
+    </section>
+  </div>
+  <aside id="detail" class="detail hidden"></aside>
+</main>
+
+<script src="/common.js"></script>
+<script src="/reviews.js"></script>
+</body>
+</html>

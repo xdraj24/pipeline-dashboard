@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skills Dashboard</title>
+<link rel="stylesheet" href="/styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">Skills dashboard <span id="repo" class="muted"></span></div>
+  <nav class="nav"><a href="/" class="on">Board</a><a href="/history">History <span id="history-count" class="muted"></span></a><a href="/reviews">Reviews</a></nav>
+  <div class="status-row" id="status-row"></div>
+  <div class="actions">
+    <label class="muted small">sprint <select id="sprint-filter"><option value="mine">mine</option><option value="all">everyone</option></select></label>
+    <label class="muted small"><input type="checkbox" id="show-done" checked> show merged</label>
+    <button id="refresh" title="Drop PR and JIRA caches and refetch">Refresh</button>
+  </div>
+</header>
+
+<section id="questions" class="questions hidden"></section>
+
+<main>
+  <section id="tickets" class="tickets"></section>
+  <aside id="detail" class="detail hidden"></aside>
+</main>
+
+<section class="bottom">
+  <details open><summary>Skills launched from this page <span id="launches-count" class="muted"></span></summary><div id="launches"></div></details>
+  <details open><summary>Pipeline runs <span id="runs-count" class="muted"></span></summary><div id="runs"></div></details>
+  <details><summary>PR reviews drafted by the skills <span id="reviews-count" class="muted"></span></summary><div id="reviews"></div></details>
+  <details><summary>Worktrees and headless agents</summary><div id="worktrees"></div></details>
+</section>
+
+<script src="/common.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

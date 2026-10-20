@@ -1,0 +1,9 @@
+{
+  "name": "skills-dashboard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.ts",
+    "dev": "node --watch-path=./server.ts --watch-path=./lib server.ts"
+  }
+}

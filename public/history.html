@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skills Dashboard · History</title>
+<link rel="stylesheet" href="/styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+</head>
+<body data-page="history">
+<header class="top">
+  <div class="brand">Skills dashboard <span id="repo" class="muted"></span></div>
+  <nav class="nav"><a href="/">Board</a><a href="/history" class="on">History <span id="history-count" class="muted"></span></a><a href="/reviews">Reviews</a></nav>
+  <div class="status-row" id="status-row"></div>
+  <div class="actions">
+    <button id="refresh" title="Drop PR and JIRA caches and refetch">Refresh</button>
+  </div>
+</header>
+
+<p class="muted small intro">Tickets whose PR is merged and whose JIRA status reached "QC'd on STG" or "Delivered IN APP.WELLIGENCE". Each got an <span class="mono">archived:</span> line in its plan.md frontmatter when it landed here.</p>
+<main>
+  <section id="tickets" class="tickets"></section>
+  <aside id="detail" class="detail hidden"></aside>
+</main>
+
+
+<script src="/common.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
