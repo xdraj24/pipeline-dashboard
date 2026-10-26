@@ -36,8 +36,9 @@ marks the stage failed.
 ## 1. Find the target branch
 
 Resolve it as `.claude/skills/_shared/find-branch.md` describes. Without an argument, the
-qualifying statuses are `ready-for-push` and any status whose frontmatter carries
-`pipeline_commit:` (with `draft`: also `ready-for-review` and `draft-pr-open`).
+qualifying statuses are `ready-for-push`, any status whose frontmatter carries
+`pipeline_commit:`, and a `ready-for-review` / `draft-pr-open` branch that is currently checked
+out in the main checkout (with `draft`: every `ready-for-review` and `draft-pr-open`).
 
 Then check `.jira-plans/<TICKET-ID>/local-branch.md`'s `status:`, if the file exists:
 
@@ -50,16 +51,28 @@ Then check `.jira-plans/<TICKET-ID>/local-branch.md`'s `status:`, if the file ex
   three hold → the human pass happened in the working tree; running this skill is the approval.
   Continue at step 2, which commits the reviewed changes. Any of the three fails → treat the
   status as below, without `pipeline_commit:`.
+- `draft-pr-open` or `ready-for-review` without `draft`, outside `PIPELINE_MODE=unattended` →
+  check the **landed-committed state**: the branch is checked out in the main checkout
+  (`git branch --show-current`, and `git rev-parse --git-dir` equals
+  `git rev-parse --git-common-dir`), `git log --oneline $(git merge-base origin/main <branch>)..<branch>`
+  shows the ticket's commit(s), and `git status --porcelain` lists none of the branch's files.
+  All three hold → the developer has the committed change running locally and tested it in the
+  browser before calling this skill; that is the human pass. Set `status: ready-for-push` (keep
+  `pr_url:`) and continue at step 3, without asking. Before building the PR body in step 7, read
+  `change-notes.md` against `qa-check.md` and fix lines that the run has since made untrue
+  (e.g. "no QA phase has run yet" when `qa-check.md` says `status: pass`). Any check fails → the
+  rules below apply.
 - `draft-pr-open`:
   - with `draft` → a re-push of the draft; continue (step 7 updates the existing PR).
-  - without `draft` → the draft PR has not had its human pass yet. Stop and tell the user to run
+  - without `draft` (and not landed-committed, above) → the draft PR has not had its human pass
+    yet. Stop and tell the user to run
     `/w-3-land-branch <TICKET-ID>` first; it flips the status to `ready-for-push` and this skill
     then finalizes the PR.
 - `ready-for-review`:
   - with `draft` → pipeline output going out as a draft; continue.
-  - without `draft` → the branch came out of the unattended pipeline and has not had a human
-    pass. Do not publish it as-is, even if explicitly named. Stop and tell the user to run
-    `/w-3-land-branch <TICKET-ID>`.
+  - without `draft` (and not landed-committed, above) → the branch came out of the unattended
+    pipeline and has not had a human pass. Do not publish it as-is, even if explicitly named.
+    Stop and tell the user to run `/w-3-land-branch <TICKET-ID>`.
 
 ## 2. Commit a landing left un-committed for review
 
