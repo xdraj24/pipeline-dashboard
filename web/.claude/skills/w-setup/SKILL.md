@@ -1,19 +1,21 @@
 ---
 name: w-setup
-description: Set up the w-* AI dev workflow on a new laptop - clone the pipeline-dashboard repo next to the web checkout, install what is missing, link the skills into web, start the dashboard and ask for a check, then optionally set up Slack escalation, the second web stack (PR review) and the third web stack (QA). Use once per machine, or to re-run a single optional step.
-argument-hint: "[web-dir] [slack|stack2|stack3] | instructions [repo-dir]"
+description: Set up the w-* AI dev workflow on a laptop - full setup, or picked components - link the skills from the pipeline-dashboard repo into web, the pipeline dashboard, Slack escalation, stack 2 for PR reviews, stack 3 for AI QA - installing what is missing on the way. Use once per machine, or to add or redo a component.
+argument-hint: "[web-dir] [full|skills|dashboard|slack|stack2|stack3 ...] | instructions [repo-dir]"
 model: sonnet
 effort: medium
 ---
 
 # Set Up the AI Dev Workflow
 
-A personal skill, installed in `~/.claude/skills/w-setup/` (see the pipeline-dashboard README)
-because it has to run before the repo that holds the other skills exists.
+A project skill, linked into the web checkout's `.claude/skills/` like the other w-* skills. On a
+new machine it becomes available after the bootstrap in the pipeline-dashboard README (clone that
+repo next to web, run its `bin/link-web.sh`); re-running it later is safe.
 
 Arguments: `$ARGUMENTS` — optional.
 - A path → the web checkout (default: ask, suggesting `~/coding/web`).
-- `slack`, `stack2` or `stack3` → run only that optional step (steps 1–4 must have run once).
+- `full`, or any of `skills`, `dashboard`, `slack`, `stack2`, `stack3` → those components, without
+  the step 0 question.
 - `instructions [repo-dir]` → run only step 3b against that repository (default: the current
   one), for any repo, not only web. Needs the pipeline-dashboard clone; ask for its path if it is
   not next to the repo.
@@ -24,9 +26,31 @@ put it in, and check only that it is set (`[ -n "$VAR" ]`, `grep -q '^KEY=.\+'`)
 
 Say what you are doing before each step; several take minutes.
 
+## 0. Choose what to set up
+
+Unless the arguments already name components, ask first, before checking or installing anything:
+
+1. "Full setup, or pick components?" — options: **Full setup** (all five below) / **Pick
+   components**.
+2. On **Pick components**, one multi-select question:
+   - **Link skills** — pipeline-dashboard clone, w-* skills linked into web, `CLAUDE.md` /
+     `AGENTS.md` (steps 2, 3, 3b)
+   - **Pipeline dashboard** — http://localhost:4848 (step 4)
+   - **Slack escalation** (step 5)
+   - **Stack 2 for PR reviews** — `../web-2nd`, `/w-24-land-branch-for-review` (step 6)
+   - **Stack 3 for AI QA** — `../web-3rd`, the qa-check browser pass (step 7)
+
+Every component needs the web checkout and the pipeline-dashboard clone, so steps 2 and 3's
+locating part (paths, `DASH`) always run. When **Link skills** is not picked but the skills are
+not linked yet (`.claude/skills/_shared` is not a symlink into `$DASH`), say the other components
+depend on it and add it. Run only the chosen steps, in order, and skip the rest silently.
+
 ## 1. Tools
 
-Check each and collect what is missing:
+Check only what the chosen components need: git and the GitHub CLI always; Node for the
+dashboard and stack 3 (Playwright); Docker for either stack; jq for the dashboard and Slack.
+
+Collect what is missing:
 
 | Tool | Check | Install (macOS) |
 |---|---|---|
@@ -45,6 +69,10 @@ start) with the `!` prefix. Re-check before continuing; stop on anything still m
 ## 2. Web checkout
 
 - The path from the argument or the answer. Exists with `docker-compose.yml` → use it.
+- `<web>/.env` must define `ticket_pattern`, `jira_browse`, `release_branch_pattern`, and
+  `dev_docker_image` (`host-runtime.md`). For each key missing from `.env`, append that line from
+  `<web>/.env.example`. If the example lacks it too, ask the developer and append the line.
+  Confirm each with `grep -q "^<key>=." "<web>/.env"`. Do not print other `.env` lines.
 - Missing → offer `git clone git@github.com:welligence/web.git <path>`. Running the main stack
   (`make init`, which needs the team's `.env` and the STG dump) is the web README's job: point at
   it, do not improvise it.
@@ -55,13 +83,15 @@ start) with the `!` prefix. Re-check before continuing; stop on anything still m
 - `$PARENT/pipeline-dashboard` exists → `git -C … pull --ff-only`. Otherwise
   `gh repo clone xdraj24/pipeline-dashboard "$PARENT/pipeline-dashboard"`.
 - `DASH="$PARENT/pipeline-dashboard"`.
-- Replace the bootstrap copy of this skill with a link, so `git pull` keeps it current:
-  `rm -rf ~/.claude/skills/w-setup && ln -s "$DASH/w-setup" ~/.claude/skills/w-setup`.
-- `"$DASH/bin/link-web.sh" <web>` — links `.claude/skills`, `.agents`, `.codex`, `.mcp.json`,
-  `scripts/pipeline`, `docs/second-dev-stack.md` into the web checkout and adds them, plus
-  `AGENTS.md`, `.jira-plans/`, `.pr-reviews/` and the `.claude/pipeline-*` / `worktrees` state,
-  to `.git/info/exclude`. Show its output. A `refusing:` line means the path is tracked in web:
-  stop and show it.
+
+The rest of this step and step 3b run for **Link skills** only:
+
+- A leftover personal copy from older setups duplicates this skill: if `~/.claude/skills/w-setup`
+  exists, remove it (`rm -rf`, after saying so).
+- `"$DASH/bin/link-web.sh" <web>` — links each w-* skill into `.claude/skills/` (a real folder,
+  so skills committed to web stay), plus `.codex`, `.mcp.json`, `scripts/pipeline`,
+  `docs/second-dev-stack.md` and `.agents/skills`, and adds them, `AGENTS.md` and the `.ai-workspace/` state folder to `.git/info/exclude`. Show its
+  output. A `skip` line means web tracks a file at that path; web's version stays, say so.
 - `git -C <web> status --short` must not list any of those paths.
 
 ## 3b. CLAUDE.md and AGENTS.md
@@ -86,7 +116,9 @@ are written straight away.
 
 - Claude Code project settings: create or merge `<web>/.claude/settings.local.json` so
   `enabledMcpjsonServers` contains `"atlassian"` (with `jq`, keeping every other key).
-- JIRA status on the board is optional. Offer it: `cp "$DASH/.env.example" "$DASH/.env"` if
+- JIRA REST credentials are optional. They drive the board's JIRA status and the attachment
+  helper (`_shared/host-runtime.md` § JIRA attachments). Without them, skills cannot read or
+  upload ticket screenshots and PDFs. Offer it: `cp "$DASH/.env.example" "$DASH/.env"` if
   missing, then the developer fills `JIRA_EMAIL` and `JIRA_API_TOKEN` there themselves (token:
   https://id.atlassian.com/manage-profile/security/api-tokens). Check with `grep -q
   '^JIRA_API_TOKEN=.\+' "$DASH/.env"`.
@@ -98,10 +130,9 @@ are written straight away.
   `up.sh stop`), retry once, then report and stop.
 - The developer restarts Claude Code in the web checkout afterwards so the linked skills load.
 
-## 5. Optional: Slack escalation
+## 5. Slack escalation
 
-Ask whether to set it up now (skip / set up). Explain first, in one short message, what it
-does: unattended pipeline runs post their questions to channel `C0BMYDZLVND` and wait for a
+Explain first, in one short message, what it does: unattended pipeline runs post their questions to channel `C0BMYDZLVND` and wait for a
 thread reply; without it they take their documented default. Then guide, one step at a time,
 confirming each:
 
@@ -117,10 +148,10 @@ confirming each:
 
 The full reference is `.claude/skills/_shared/slack-escalation.md` § Setup.
 
-## 6. Optional: second web stack (PR review)
+## 6. Second web stack (PR review)
 
 Used by `/w-24-land-branch-for-review`: `../web-2nd`, compose project `web2`,
-http://127.0.0.1:4000. Ask whether to set it up (skip / set up). Before starting, say:
+http://127.0.0.1:4000. Before starting, say:
 
 - Docker Desktop needs at least 16 GB of memory for two stacks (measured, see
   `docs/second-dev-stack.md`); check Settings → Resources.
@@ -142,11 +173,10 @@ Then, from the web checkout, with `S=<web>/scripts/pipeline/stack.sh`:
 5. Ask the developer to open http://127.0.0.1:4000 (not `localhost:4000`), log in with their own
    account or the E2E user, and confirm it works.
 
-## 7. Optional: third web stack (QA)
+## 7. Third web stack (QA)
 
 Used by the qa-check phase of `/w-1-coding` for its browser pass, from the main checkout and from
-pipeline worktrees: `../web-3rd`, compose project `web3`, http://qa.localhost:5100. Ask whether
-to set it up (skip / set up). Before starting, say that three stacks need more Docker memory
+pipeline worktrees: `../web-3rd`, compose project `web3`, http://qa.localhost:5100. Before starting, say that three stacks need more Docker memory
 than two (my estimate: at least 24 GB, not measured) and another full DB restore.
 
 Same as step 6 with `3` instead of `2` (ports 5131/5100/5135/5434/6381), then:
@@ -168,5 +198,5 @@ Same as step 6 with `3` instead of `2` (ports 5131/5100/5135/5434/6381), then:
 
 One short block: tools installed, web checkout and pipeline repo paths, what step 3b did to
 `CLAUDE.md` and `AGENTS.md` (copied, enriched with which rules, untouched, contradictions), dashboard URL and the
-developer's check, and per optional step: done / skipped / failed with the reason. End with the
+developer's check, and per component: done / not chosen / failed with the reason. End with the
 restart reminder from step 4 when skills were newly linked.

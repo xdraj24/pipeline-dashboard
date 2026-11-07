@@ -1,7 +1,7 @@
 ---
 name: w-25-re-review-pr
-description: Re-review a PR after its author addressed your comments (by XWWP ticket, PR link or number) - check each of your review threads against the new commits, and approve when every one is properly addressed and you left a "🦈 visually tested" comment. Use when another developer asks for a re-review.
-argument-hint: "<XWWP-XXXX|PR-link-or-number>"
+description: Re-review a PR after its author addressed your comments (by Jira ticket, PR link or number) - check each of your review threads against the new commits, and approve when every one is properly addressed and you left a "🦈 visually tested" comment. Use when another developer asks for a re-review.
+argument-hint: "<TICKET-ID|PR-link-or-number>"
 model: opus
 effort: high
 ---
@@ -15,7 +15,7 @@ Host-specific mechanics (arguments, invoking other skills, delegation, asking th
 `.claude/skills/_shared/host-runtime.md`. Every question for the developer goes through
 `.claude/skills/_shared/slack-escalation.md`.
 
-Argument: `$ARGUMENTS` — required: an XWWP ticket id, a GitHub PR URL or a bare PR number. If
+Argument: `$ARGUMENTS` — required: a ticket id matching `ticket_pattern` (`host-runtime.md`), a GitHub PR URL or a bare PR number. If
 missing, ask for one before doing anything else.
 
 ## 1. Resolve the PR and gather its state

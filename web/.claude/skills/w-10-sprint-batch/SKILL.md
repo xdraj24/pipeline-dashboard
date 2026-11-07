@@ -1,7 +1,7 @@
 ---
 name: w-10-sprint-batch
-description: Find every XWWP ticket assigned to you in the current sprint's To Do column, confirm the list, and hand them all to /w-1-coding (plan here, the rest in parallel worktrees). Same phase and mode arguments as /w-1-coding. Use to run the whole sprint column in one go.
-argument-hint: "[XWWP-XXXX ...] [just-plan|just-implement|just-code-review|just-commit|just-qa-check] [background|here|draft-pr] [--jobs=N] [--waitForReply=N]"
+description: Find every ticket assigned to you in the current sprint's To Do column, confirm the list, and hand them all to /w-1-coding (plan here, the rest in parallel worktrees supervised from this session). Same phase and mode arguments as /w-1-coding. Use to run the whole sprint column in one go.
+argument-hint: "[<TICKET-ID> ...] [just-plan|just-implement|just-code-review|just-commit|just-qa-check] [supervised|background|here|draft-pr] [--jobs=N] [--waitForReply=N]"
 model: sonnet
 effort: medium
 ---
@@ -9,8 +9,8 @@ effort: medium
 # Sprint Batch
 
 Find the tickets, confirm the scope, and delegate everything else to `/w-1-coding`, which does
-the planning in this context and fans the rest out to the unattended pipeline (one git worktree
-per ticket, `MAX_SLOTS` in `scripts/pipeline/lib.sh` at a time). Nothing from the pipeline
+the planning in this context and fans the rest out to one git worktree per ticket (`MAX_SLOTS` in
+`scripts/pipeline/lib.sh` at a time), coordinated from this session by default. Nothing from the pipeline
 reaches a non-draft PR until a human has looked at it via `/w-3-land-branch`.
 
 Host-specific mechanics (arguments, invoking other skills, delegation, asking the developer):
@@ -18,11 +18,14 @@ Host-specific mechanics (arguments, invoking other skills, delegation, asking th
 
 `$ARGUMENTS` is optional and is passed through to `/w-1-coding` with the same meaning:
 
-- Bare ticket ids (`XWWP-1234 XWWP-1235`) → skip the JIRA search, use exactly those.
+- Bare ticket ids (tokens matching `ticket_pattern`, `host-runtime.md`) → skip the JIRA search, use exactly those.
 - `just-plan` / `just-implement` / `just-code-review` / `just-commit` / `just-qa-check` → run
   only that phase for every ticket (`just-plan` is the old "prepare only"). None → all five.
-- `background` (default) / `here` / `draft-pr` → where the implement, code-review, commit and
-  qa-check phases run. `here` means one ticket at a time, sequentially, in this working directory — the
+- `supervised` (default in interactive Claude Code) / `background` (default elsewhere) / `here` /
+  `draft-pr` → where the implement, code-review, commit and qa-check phases run. `supervised`
+  runs them as subagents of this session, which stays open until the batch finishes and asks you
+  any question they hit (`.claude/skills/_shared/supervised-run.md`). `background` detaches the
+  bash pipeline so the session can be cleared. `here` means one ticket at a time, sequentially, in this working directory — the
   only option on a host without a pipeline runner (`.claude/skills/_shared/host-runtime.md`
   § The unattended pipeline per host). `draft-pr` ends every ticket with a draft PR.
 - `--jobs=N` → pipeline concurrency (default and hard max `MAX_SLOTS`).
@@ -45,10 +48,11 @@ for a plan refresh unless the user asked for one.
 Skip this step entirely if explicit ticket ids were passed in `$ARGUMENTS`.
 
 - Cloud id: `mcp__atlassian__getAccessibleAtlassianResources`.
+- Project key from `ticket_pattern` (`host-runtime.md`).
 - `mcp__atlassian__searchJiraIssuesUsingJql` with:
 
   ```
-  project = XWWP AND assignee = currentUser() AND sprint IN openSprints() AND status = "To Do" ORDER BY rank ASC
+  project = <key> AND assignee = currentUser() AND sprint IN openSprints() AND status = "To Do" ORDER BY rank ASC
   ```
 
   Request the `key`, `summary`, `issuetype`, and `status` fields.
@@ -85,17 +89,18 @@ Invoke the skill once (in your host's syntax, see `.claude/skills/_shared/host-r
 
 It plans every ticket that lacks a plan here (one `Plan` agent per ticket, in parallel, with
 blocking questions escalated before anything is fanned out), verifies each `plan.md` landed,
-drops any ticket whose plan is missing, then launches
-`./scripts/pipeline/run-batch-implement.sh` in the background for the remaining phases — or, in
-`here` mode, runs them one ticket at a time in this session.
+drops any ticket whose plan is missing, then runs the remaining phases: as the supervised
+coordinator in this session, by launching `./scripts/pipeline/run-batch-implement.sh` in the
+background, or, in `here` mode, one ticket at a time in this session.
 
 ## 4. Report back
 
 Relay `/w-1-coding`'s report:
 
-- The tickets in the batch and where each log lives (`.claude/pipeline-logs/<run-id>/`), plus
+- The tickets in the batch and where each log lives (`.ai-workspace/pipeline-logs/<run-id>/` for a
+  background run, the heartbeat `progress.log` in each worktree's plan folder for a supervised one), plus
   any ticket skipped as already at `ready-for-review` / `draft-pr-open` or already landed.
-- The worktree path per ticket: `.claude/worktrees/<TICKET-ID>`.
+- The worktree path per ticket: `.ai-workspace/worktrees/<TICKET-ID>`.
 - Any ticket dropped because planning failed, and any ticket that failed partway through the
   pipeline (which stage, and that its worktree is left in place for inspection).
 - The natural next step for every ticket that completes the pipeline:
@@ -106,4 +111,5 @@ Relay `/w-1-coding`'s report:
   into a ready one).
 
 If the batch was launched in the background, say plainly that results will arrive later and that
-clearing the session is safe now.
+clearing the session is safe now. A supervised batch reports only once every ticket has finished;
+until then, keep the session open.

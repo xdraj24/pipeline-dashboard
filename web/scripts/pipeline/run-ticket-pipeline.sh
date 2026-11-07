@@ -25,10 +25,10 @@
 # stage to be in --stages.
 #
 # Up to MAX_SLOTS (lib.sh) tickets can run concurrently, coordinated via
-# atomic-mkdir slot files under .claude/pipeline-slots/. Run this from any
+# atomic-mkdir slot files under .ai-workspace/pipeline-slots/. Run this from any
 # checkout of the repo, including from inside a worktree it previously
 # created — the repo root is resolved via `git rev-parse --git-common-dir`
-# so slot/`.jira-plans/` bookkeeping always lands in the right place.
+# so slot/`.ai-workspace/jira-plans/` bookkeeping always lands in the right place.
 #
 # A Claude Code stage is capped by PIPELINE_MAX_TURNS (default 300) and, when
 # PIPELINE_MAX_BUDGET_USD is set, by that spend; codex and cursor have no
@@ -37,7 +37,7 @@
 # phase is re-entrant, so a retry resumes where the failed attempt stopped.
 # All three are plain environment variables.
 #
-# Once all stages succeed, the ticket's `.jira-plans/<TICKET-ID>/local-branch.md`
+# Once all stages succeed, the ticket's `.ai-workspace/jira-plans/<TICKET-ID>/local-branch.md`
 # has `status: ready-for-review` (or `draft-pr-open` with --draft-pr) — run
 # `/w-3-land-branch <TICKET-ID>` next to land it back into your main checkout
 # for a human pass.
@@ -153,14 +153,14 @@ fi
 # Without the plan stage there is nothing to generate a plan, so one must
 # already exist in the main checkout. Check before claiming a slot so a missing
 # plan fails instantly instead of holding a slot hostage.
-if ! stage_enabled plan && [ ! -f "$REPO_ROOT/.jira-plans/$TICKET_ID/plan.md" ]; then
-  echo "No plan at .jira-plans/$TICKET_ID/plan.md and the 'plan' stage is disabled." >&2
+if ! stage_enabled plan && [ ! -f "$REPO_ROOT/.ai-workspace/jira-plans/$TICKET_ID/plan.md" ]; then
+  echo "No plan at .ai-workspace/jira-plans/$TICKET_ID/plan.md and the 'plan' stage is disabled." >&2
   echo "Run /w-1-coding $TICKET_ID just-plan first, or add 'plan' to --stages." >&2
   exit 1
 fi
 
 # 2. Claim a slot via atomic mkdir. The owner file
-# (.claude/pipeline-slots/.owner-<TICKET_ID>) is the single source of truth
+# (.ai-workspace/pipeline-slots/.owner-<TICKET_ID>) is the single source of truth
 # for "which slot number does this ticket currently hold" — the Slack
 # escalation helpers (release-slot.sh / reclaim-slot.sh) update it from a
 # completely separate headless agent process while this script is blocked
@@ -168,7 +168,7 @@ fi
 # with can go stale. The EXIT trap below always re-reads the owner file
 # rather than closing over a fixed slot number, so cleanup targets whichever
 # slot is actually current no matter which process last changed it.
-SLOTS_DIR="$REPO_ROOT/.claude/pipeline-slots"
+SLOTS_DIR="$REPO_ROOT/.ai-workspace/pipeline-slots"
 OWNER_FILE="$SLOTS_DIR/.owner-$TICKET_ID"
 
 cleanup() {
@@ -183,81 +183,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-SLOT="$("$SCRIPT_DIR/claim-slot.sh" "$REPO_ROOT" "$TICKET_ID")"
-echo "Claimed slot: $SLOT"
-
-# 3. Worktree setup. Worktrees don't share untracked files/dirs with the main
-# checkout (only the git object database/refs are shared), and .jira-plans/
-# is untracked — so plan.md etc. must be copied in explicitly.
-WORKTREE="$REPO_ROOT/.claude/worktrees/$TICKET_ID"
-
-git -C "$REPO_ROOT" fetch origin main
-
-if [ -d "$WORKTREE" ]; then
-  echo "Worktree already exists at $WORKTREE — reusing it."
-else
-  git -C "$REPO_ROOT" worktree add -d "$WORKTREE" origin/main
-fi
-
-mkdir -p "$WORKTREE/.jira-plans"
-if [ -f "$REPO_ROOT/.jira-plans/$TICKET_ID/plan.md" ]; then
-  echo "Existing plan found in main checkout — copying into worktree (plan stage will be skipped)."
-  cp -r "$REPO_ROOT/.jira-plans/$TICKET_ID" "$WORKTREE/.jira-plans/"
-fi
-
-# The `/w-*` stage commands below live in .claude/skills/, which is untracked —
-# so a worktree checked out from origin/main has no skills at all and every
-# stage would die with "Unknown command". Copy them in, plus the per-host MCP
-# config for the JIRA/Slack servers the skills rely on (Slack is how unattended
-# runs escalate) and the Codex/Cursor discovery files (symlinks stay relative,
-# so .agents/skills resolves to the worktree's own copy).
-if [ -d "$REPO_ROOT/.claude/skills" ]; then
-  mkdir -p "$WORKTREE/.claude"
-  rm -rf "$WORKTREE/.claude/skills"
-  cp -R "$REPO_ROOT/.claude/skills" "$WORKTREE/.claude/"
-else
-  echo "No .claude/skills/ in $REPO_ROOT — the /w-* stage commands will not resolve." >&2
-  exit 1
-fi
-
-for f in .mcp.json .claude/settings.json .claude/settings.local.json flags.json \
-    .codex/config.toml .codex/agents .cursor/mcp.json .agents AGENTS.md; do
-  if { [ -e "$REPO_ROOT/$f" ] || [ -L "$REPO_ROOT/$f" ]; } \
-      && ! { [ -e "$WORKTREE/$f" ] || [ -L "$WORKTREE/$f" ]; }; then
-    mkdir -p "$WORKTREE/$(dirname "$f")"
-    cp -RP "$REPO_ROOT/$f" "$WORKTREE/$f"
-  fi
-done
-
-# The dev containers mount the main checkout at /app, so the worktree is
-# visible inside them at this path. Every check the skills run uses it as the
-# container working directory (see .claude/skills/_shared/run-checks.md).
-CONTAINER_WORKDIR="/app/.claude/worktrees/$TICKET_ID"
-
-if docker exec web-spa-1 ln -sf /app/frontend/node_modules "$CONTAINER_WORKDIR/frontend/node_modules" 2>/dev/null; then
-  echo "Symlinked frontend/node_modules into the worktree."
-else
-  echo "Warning: could not symlink frontend/node_modules into the worktree (best-effort, non-fatal)." >&2
-fi
-
-# 4. Export env for the child processes.
-export PIPELINE_MODE=unattended
-export TEST_ENV_NUMBER=$((SLOT + 1))
-export PIPELINE_REPO_ROOT="$REPO_ROOT"
-export PIPELINE_CONTAINER_WORKDIR="$CONTAINER_WORKDIR"
-if [ -n "$WAIT_FOR_REPLY" ]; then
-  export WAIT_FOR_REPLY_MINUTES="$WAIT_FOR_REPLY"
-fi
-
-# Each slot has its own test database (welligence_test<TEST_ENV_NUMBER>, see
-# backend/config/database.yml). Create or migrate it up front so backend specs
-# in this run don't fail on a missing database or collide with another slot.
-if docker exec -e TEST_ENV_NUMBER -e RAILS_ENV=test -w "$CONTAINER_WORKDIR/backend" web-web-1 \
-    bundle exec rails db:prepare >/dev/null 2>&1; then
-  echo "Test database welligence_test$TEST_ENV_NUMBER is ready."
-else
-  echo "Warning: could not prepare welligence_test$TEST_ENV_NUMBER — backend specs in this run may fail." >&2
-fi
+# 3. Worktree, slot test database and pipeline.env: shared with the supervised
+# coordinator.
+PREPARED="$("$SCRIPT_DIR/prepare-worktree.sh" "$TICKET_ID" unattended ${WAIT_FOR_REPLY:+"$WAIT_FOR_REPLY"})"
+eval "$PREPARED"
+# shellcheck source=/dev/null
+source "$WORKTREE/.ai-workspace/pipeline.env"
 
 cd "$WORKTREE"
 
@@ -348,7 +279,7 @@ assert_worktree_dirty() {
   # config) — otherwise the worktree always looks dirty and a stage that wrote
   # no actual code would pass this check.
   if [ -z "$(git -C "$WORKTREE" status --porcelain -- . \
-      ':!.jira-plans' ':!.claude' ':!.mcp.json' ':!flags.json' \
+      ':!.ai-workspace' ':!.claude' ':!.mcp.json' ':!flags.json' \
       ':!.codex' ':!.cursor' ':!.agents' ':!AGENTS.md')" ]; then
     echo "Stage $stage: reported success but the worktree has no changes." >&2
     return 1
@@ -356,15 +287,15 @@ assert_worktree_dirty() {
   return 0
 }
 
-LOCAL_BRANCH_MD=".jira-plans/$TICKET_ID/local-branch.md"
+LOCAL_BRANCH_MD=".ai-workspace/jira-plans/$TICKET_ID/local-branch.md"
 
 if ! stage_enabled plan; then
   echo "=== Stage: plan (skipped, not in --stages) ==="
   progress "plan: skipped (not in --stages)"
-elif [ ! -f ".jira-plans/$TICKET_ID/plan.md" ]; then
+elif [ ! -f ".ai-workspace/jira-plans/$TICKET_ID/plan.md" ]; then
   if ! run_stage plan "$(skill_invocation w-1-coding "$TICKET_ID" just-plan here)"; then
     STAGE_FAILED="plan"
-  elif [ ! -f ".jira-plans/$TICKET_ID/plan.md" ]; then
+  elif [ ! -f ".ai-workspace/jira-plans/$TICKET_ID/plan.md" ]; then
     echo "Stage plan: no plan.md was written." >&2
     progress "plan: FAILED (no plan.md written)"
     STAGE_FAILED="plan"
@@ -379,7 +310,7 @@ if [ -z "$STAGE_FAILED" ] && stage_enabled implement; then
     STAGE_FAILED="implement"
   elif ! assert_worktree_dirty implement; then
     STAGE_FAILED="implement"
-  elif ! grep -q '^- \[x\]' ".jira-plans/$TICKET_ID/plan.md"; then
+  elif ! grep -q '^- \[x\]' ".ai-workspace/jira-plans/$TICKET_ID/plan.md"; then
     echo "Stage implement: no to-do item in plan.md was ticked." >&2
     progress "implement: FAILED (no to-do ticked)"
     STAGE_FAILED="implement"
@@ -389,7 +320,7 @@ fi
 stage_code_review() {
   if ! run_stage code-review "$(skill_invocation w-1-coding "$TICKET_ID" just-code-review here)"; then
     STAGE_FAILED="code-review"
-  elif [ ! -f ".jira-plans/$TICKET_ID/code-review.md" ]; then
+  elif [ ! -f ".ai-workspace/jira-plans/$TICKET_ID/code-review.md" ]; then
     echo "Stage code-review: no code-review.md was written." >&2
     progress "code-review: FAILED (no code-review.md written)"
     STAGE_FAILED="code-review"
@@ -414,7 +345,7 @@ if [ -z "$STAGE_FAILED" ] && stage_enabled commit; then
   stage_commit
 fi
 
-QA_CHECK_MD=".jira-plans/$TICKET_ID/qa-check.md"
+QA_CHECK_MD=".ai-workspace/jira-plans/$TICKET_ID/qa-check.md"
 
 if [ -z "$STAGE_FAILED" ] && stage_enabled qa-check; then
   if ! run_stage qa-check "$(skill_invocation w-1-coding "$TICKET_ID" just-qa-check here)"; then
@@ -445,8 +376,8 @@ fi
 # 5. Copy artifacts back so they're readable from the main checkout
 # afterward (needed by /w-3-land-branch). Best-effort, even on
 # failure, so a failed run can still be inspected.
-mkdir -p "$REPO_ROOT/.jira-plans"
-cp -Rp "$WORKTREE/.jira-plans/$TICKET_ID" "$REPO_ROOT/.jira-plans/" 2>/dev/null || true
+mkdir -p "$REPO_ROOT/.ai-workspace/jira-plans"
+cp -Rp "$WORKTREE/.ai-workspace/jira-plans/$TICKET_ID" "$REPO_ROOT/.ai-workspace/jira-plans/" 2>/dev/null || true
 
 BRANCH="(unknown — local-branch.md not found)"
 PR_URL=""

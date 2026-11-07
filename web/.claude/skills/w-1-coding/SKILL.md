@@ -1,7 +1,7 @@
 ---
 name: w-1-coding
-description: Take XWWP tickets from JIRA to a locally committed, QA-checked branch (plan, implement, two-model review, commit, staff-level QA in the running app) or run one phase (just-plan/just-implement/just-code-review/just-commit/just-qa-check), in parallel worktrees (background, draft-pr) or in place (here). Use to plan, implement, review, commit or QA a ticket.
-argument-hint: "XWWP-XXXX [XWWP-YYYY ...] [just-plan|just-implement|just-code-review|just-commit|just-qa-check] [background|here|draft-pr] [--jobs=N] [--waitForReply=N]"
+description: Take Jira tickets from JIRA to a locally committed, QA-checked branch (plan, implement, specialist review panel, commit, functional and regression QA in the running app) or run one phase (just-plan/just-implement/just-code-review/just-commit/just-qa-check), in parallel worktrees (supervised from this session, background, draft-pr) or in place (here). Use to plan, implement, review, commit or QA a ticket.
+argument-hint: "<TICKET-ID> [<TICKET-ID> ...] [just-plan|just-implement|just-code-review|just-commit|just-qa-check] [supervised|background|here|draft-pr] [--jobs=N] [--waitForReply=N]"
 model: sonnet
 effort: xhigh
 ---
@@ -16,11 +16,11 @@ Host-specific mechanics (arguments, invoking other skills, delegation, asking th
 
 | Phase | File | Writes |
 |-------|------|--------|
-| plan | `phases/plan.md` | `.jira-plans/<TICKET-ID>/plan.md` |
+| plan | `phases/plan.md` | `.ai-workspace/jira-plans/<TICKET-ID>/plan.md` |
 | implement | `phases/implement.md` | code + tests on a ticket branch, ticks `plan.md` to-dos |
-| code-review | `phases/code-review.md` | `.jira-plans/<TICKET-ID>/code-review.md` |
-| commit | `phases/commit.md` | `.jira-plans/<TICKET-ID>/change-notes.md`, `local-branch.md`, one local commit |
-| qa-check | `phases/qa-check.md` | `.jira-plans/<TICKET-ID>/qa-check.md`; may change code (then code-review and commit run again) |
+| code-review | `phases/code-review.md` | `.ai-workspace/jira-plans/<TICKET-ID>/code-review.md` |
+| commit | `phases/commit.md` | `.ai-workspace/jira-plans/<TICKET-ID>/change-notes.md`, `local-branch.md`, one local commit |
+| qa-check | `phases/qa-check.md` | `.ai-workspace/jira-plans/<TICKET-ID>/qa-check.md`; may change code (then code-review and commit run again) |
 
 qa-check is the last phase: a strong model plays staff-level QA against the committed branch,
 in the running app when the checkout under test is the one the dev containers serve. When it
@@ -35,12 +35,13 @@ otherwise).
 
 Split on whitespace/commas. Classify each token:
 
-- `XWWP-\d+` (case-insensitive, uppercase it) → a ticket id. De-duplicate. At least one is
+- A token matching `ticket_pattern` (case-insensitive, uppercase the key; `host-runtime.md`) → a ticket id. De-duplicate. At least one is
   required — if none, ask the developer for one before doing anything else.
 - `just-plan` / `just-implement` / `just-code-review` / `just-commit` / `just-qa-check` → the
   **phase**. At most one. None → run all five in order.
-- `background` / `here` / `draft-pr` → the **mode**. At most one. None → `background`.
-- `--jobs=N` → pipeline concurrency for background modes (default and hard max: `MAX_SLOTS` in
+- `supervised` / `background` / `here` / `draft-pr` → the **mode**. At most one. None →
+  `supervised` in an interactive Claude Code session, `background` on any other host.
+- `--jobs=N` → pipeline concurrency for `supervised` and the background modes (default and hard max: `MAX_SLOTS` in
   `scripts/pipeline/lib.sh`).
 - `--waitForReply=N` → minutes an escalation waits for a reply before falling back to the phase's
   best-guess default. Omit it and an escalation waits indefinitely. In `here` mode treat it as
@@ -52,6 +53,9 @@ Then apply these rules:
 - **`PIPELINE_MODE=unattended` is set** (you are already one stage of
   `scripts/pipeline/run-ticket-pipeline.sh`) → force mode `here`. Never launch the pipeline from
   inside the pipeline.
+- **Mode `supervised`** needs Claude Code's `Agent`, `SendMessage`, `TaskStop` and `Monitor`
+  tools (`.claude/skills/_shared/host-runtime.md` § Supervised runs). Asked for explicitly on a
+  host without them → say so and offer `background` or `here`.
 - **Mode `here`** takes exactly one ticket, except `just-plan`, which takes any number (planning
   doesn't touch the working tree). More than one ticket with another phase → ask which one.
 - **`draft-pr`** is `background` plus a draft PR at the end, so it needs the commit phase in the
@@ -66,10 +70,10 @@ Then apply these rules:
 
 For every ticket, before running anything:
 
-- `.jira-plans/<TICKET-ID>/plan.md` — exists? Read its `## To-do` list: `<ticked>/<total>`.
-- `.jira-plans/<TICKET-ID>/local-branch.md` — exists? Read `status:`.
-- `.jira-plans/<TICKET-ID>/qa-check.md` — exists? Read `status:` and `code_changed:`.
-- `.claude/worktrees/<TICKET-ID>` — exists?
+- `.ai-workspace/jira-plans/<TICKET-ID>/plan.md` — exists? Read its `## To-do` list: `<ticked>/<total>`.
+- `.ai-workspace/jira-plans/<TICKET-ID>/local-branch.md` — exists? Read `status:`.
+- `.ai-workspace/jira-plans/<TICKET-ID>/qa-check.md` — exists? Read `status:` and `code_changed:`.
+- `.ai-workspace/worktrees/<TICKET-ID>` — exists?
 
 That combination is the state. Ask "what's still open?", never "what step are you in?". Don't
 re-ask anything already recorded in `plan.md`.
@@ -110,20 +114,27 @@ developer; don't start the next one.
 - A full run ends with `local-branch.md` at `status: ready-for-push` (you were in the loop the
   whole time, so no landing pass is needed). Next step: `/w-4-publish <TICKET-ID>`.
 
-## 4. Modes `background` and `draft-pr`
+## 4. Modes `supervised`, `background` and `draft-pr`
 
 ### a. Plan here first
 
 If the plan phase is part of the run (full run with a ticket that has no `plan.md`, or
 `just-plan`), run `phases/plan.md` now, in this session, for all such tickets in one go. When it
 returns, verify `plan.md` exists for each. Drop any ticket whose plan is missing from the launch
-below and report it — the pipeline refuses to start a ticket without a plan.
+below and report it — neither the coordinator nor the pipeline starts a ticket without a plan.
 
 If the run is `just-plan`, you're done: report as in step 5.
 
-### b. Launch the pipeline
+### b. `supervised`: coordinate from this session
 
-Map the phase to the script's `--stages` value:
+Follow `.claude/skills/_shared/supervised-run.md` for the remaining tickets, running the stages
+the phase maps to in the table below (a qa-check that changes code still brings code-review and
+commit back once). Stay in this session until every ticket has finished, then report as step 5
+says. Don't tell the developer clearing the session is safe: it stops the run.
+
+### c. `background` / `draft-pr`: launch the pipeline
+
+Map the phase to the stages (`--stages` for the script):
 
 | Phase | `--stages` |
 |-------|-----------|
@@ -147,18 +158,18 @@ other host has no pipeline: tell the developer and offer `here` mode instead. Ru
 a plain foreground shell call — the trailing `&` returns immediately and the batch keeps running
 on its own (on macOS the script holds the machine awake with `caffeinate` for the duration; a
 closed lid still suspends it). Tell the developer the batch is launched, that they can move on
-immediately (clearing the session and quitting are safe), and where to watch it: per-ticket logs in `.claude/pipeline-logs/<run-id>/<TICKET-ID>.log`
-and the live feed at `.claude/pipeline-logs/<run-id>/progress.log` (the run id is printed by the
-script; `ls -t .claude/pipeline-logs | head -1` finds the newest).
+immediately (clearing the session and quitting are safe), and where to watch it: per-ticket logs in `.ai-workspace/pipeline-logs/<run-id>/<TICKET-ID>.log`
+and the live feed at `.ai-workspace/pipeline-logs/<run-id>/progress.log` (the run id is printed by the
+script; `ls -t .ai-workspace/pipeline-logs | head -1` finds the newest).
 
-### c. What the pipeline does (for reporting back)
+### d. What the pipeline does (for reporting back)
 
 For each ticket, `run-batch-implement.sh` runs `run-ticket-pipeline.sh <TICKET> --stages=…`
 which:
 
 1. Claims a pipeline slot (`scripts/pipeline/claim-slot.sh`).
-2. Creates `.claude/worktrees/<TICKET-ID>` detached at fresh `origin/main` (or reuses it), and
-   copies the ticket's `.jira-plans/<TICKET-ID>/`, this `.claude/skills/` folder and the host
+2. Creates `.ai-workspace/worktrees/<TICKET-ID>` detached at fresh `origin/main` (or reuses it), and
+   copies the ticket's `.ai-workspace/jira-plans/<TICKET-ID>/`, this `.claude/skills/` folder and the host
    config files (`.mcp.json`, `.codex/`, `.cursor/mcp.json`, `.agents`, `AGENTS.md`) into it.
 3. Symlinks `frontend/node_modules` into the worktree and prepares the slot's test database
    (both best-effort).
@@ -177,7 +188,7 @@ which:
 6. With `--draft-pr`: runs `/w-4-publish <TICKET-ID> draft` in the worktree after the last
    commit — rebases onto fresh `origin/main`, pushes, opens a **draft** PR whose last section is
    the ticket's `change-notes.md`, and sets `status: draft-pr-open`.
-7. Copies `.jira-plans/<TICKET-ID>/` back to the main checkout and releases the slot.
+7. Copies `.ai-workspace/jira-plans/<TICKET-ID>/` back to the main checkout and releases the slot.
 
 Under `PIPELINE_MODE=unattended` the commit phase writes `status: ready-for-review` (never
 `ready-for-push`): nothing from the pipeline reaches a non-draft PR until a human has looked at
@@ -186,7 +197,8 @@ it via `/w-3-land-branch`.
 ## 5. Report back
 
 - Per ticket: the phases run (or launched), `plan.md` path and to-do count `<ticked>/<total>`,
-  the branch name once one exists, and the log path for a background run.
+  the branch name once one exists, and the log path for a background run (the worktree path
+  and any question asked for a supervised one).
 - Any ticket skipped (already at `ready-for-review` / `draft-pr-open` with a QA check, or
   landed) and why; any ticket dropped because planning failed.
 - Each phase's own report (the phase file says what to include) when it ran here.
@@ -198,6 +210,6 @@ it via `/w-3-land-branch`.
   - after qa-check with `code_changed: yes` (phase run on its own) →
     `/w-1-coding <TICKET-ID> just-code-review [here]`, then `just-commit`
   - after qa-check, or the re-cycle it triggered, in `here` mode → `/w-4-publish <TICKET-ID>`
-  - after qa-check in `background` / `draft-pr` mode → `/w-3-land-branch <TICKET-ID>`
+  - after qa-check in `supervised` / `background` / `draft-pr` mode → `/w-3-land-branch <TICKET-ID>`
   - whenever `qa-check.md` says `browser: skipped (...)` or `browser: blocked (...)`, put the
     browser re-run first, as `phases/qa-check.md` § 4 words it.

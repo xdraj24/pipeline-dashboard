@@ -1,7 +1,7 @@
 ---
 name: w-4-1-fast-track-push-to-release
-description: Hotfix path instead of /w-4-publish. Cherry-pick a locally-prepared XWWP fix onto a chosen release branch, push, and open a RELEASE-titled PR into it. Use when a prepared fix must reach an already-cut release branch.
-argument-hint: "[branch-name-or-XWWP-XXXX]"
+description: Hotfix path instead of /w-4-publish. Cherry-pick a locally-prepared fix onto a chosen release branch, push, and open a RELEASE-titled PR into it. Use when a prepared fix must reach an already-cut release branch.
+argument-hint: "[branch-name-or-TICKET-ID]"
 model: sonnet
 effort: medium
 ---
@@ -21,7 +21,7 @@ This does **not** land the fix in `main`. Once the release PR merges, run
 `/w-4-2-cherrypick-to-main` with the resulting commit hash so `main` doesn't miss the fix.
 
 Argument: `$ARGUMENTS` — optional. A branch name, a partial branch name, or a ticket id
-(e.g. `XWWP-1551`). Same lookup rules as `/w-4-publish`.
+(a ticket id matching `ticket_pattern`, `host-runtime.md`). Same lookup rules as `/w-4-publish`.
 
 Every question for the developer in this skill goes through
 `.claude/skills/_shared/slack-escalation.md`.
@@ -40,7 +40,7 @@ fix). Apply its "Before switching branches" guard.
 ## 2. Choose the release branch
 
 - `git fetch origin --quiet` to make sure remote branch refs are current.
-- List candidates: `git for-each-ref --sort=-committerdate --format='%(refname:short) | %(committerdate:short) | %(subject)' 'refs/remotes/origin/release/*'`.
+- List candidates: `git for-each-ref --sort=-committerdate --format='%(refname:short) | %(committerdate:short) | %(subject)' refs/remotes/origin | grep -E "^origin/<release_branch_pattern> "` (`release_branch_pattern` from `host-runtime.md`).
 - Take the 8 most recent and present them as a numbered single-select list, each option showing
   the last-commit date and subject so the user can tell them apart. Always leave a way for the
   developer to name a release branch older than the top 8.
@@ -52,15 +52,16 @@ fix). Apply its "Before switching branches" guard.
 - Branch name:
 
   ```
-  <prefix>/XWWP-<number>-<release-branch-without-"release/">-<short-fix-description>
+  <prefix>/<TICKET-ID>-<release-branch-without-its-first-segment>-<short-fix-description>
   ```
 
   - `<prefix>`: `bugfix/` or `feature/`, same rule as `/w-1-coding`'s commit phase (from the
-    ticket's JIRA issue type; reuse it from `.jira-plans/<TICKET-ID>/plan.md` if present, else
+    ticket's JIRA issue type; reuse it from `.ai-workspace/jira-plans/<TICKET-ID>/plan.md` if present, else
     look it up via `mcp__atlassian__getJiraIssue`).
   - Keep it ≤ 60 chars — drop words from `<short-fix-description>` first if it's too long, since
     the release-branch segment isn't optional (it's what makes the fix branch identifiable).
-  - Example: `bugfix/XWWP-5230-r378-text-overflow`.
+  - The release-branch segment is the branch with its first path segment removed (`release/r378` → `r378` when the pattern is `release/r[0-9]+`).
+  - Example: `bugfix/<TICKET-ID>-r378-text-overflow`.
 - `git checkout -b <fix-branch> origin/<release-branch>`.
 
 ## 4. Apply the fix
@@ -89,17 +90,17 @@ fails, **stop**: report it and do not push. Fix only if the user asks.
 - Title **must contain the literal word `RELEASE`**, e.g.:
 
   ```
-  RELEASE: XWWP-<number> <short description>
+  RELEASE: <TICKET-ID> <short description>
   ```
 
 - Body from the template at `.github/pull_request_template.md`:
   - **Overview**: what the fix does, and that it's a fast-tracked hotfix targeting
     `<release-branch>` ahead of/instead of the normal `main` merge.
-  - **JIRA Ticket**: `[<TICKET-ID>](https://welligence.atlassian.net/browse/<TICKET-ID>)`.
+  - **JIRA Ticket**: `[<TICKET-ID>](<jira_browse>/<TICKET-ID>)`.
   - **Dependencies**: note that this fix still needs to reach `main` — once this PR merges, run
     `/w-4-2-cherrypick-to-main <TICKET-ID> <resulting-commit-hash>` to land it there too (unless
     the ticket is already covered by a separate PR into `main`).
-  - **Testing Instructions**: carry over from `.jira-plans/<TICKET-ID>/local-branch.md` if
+  - **Testing Instructions**: carry over from `.ai-workspace/jira-plans/<TICKET-ID>/local-branch.md` if
     present, else derive from the diff/ticket.
 
   ```
@@ -108,7 +109,7 @@ fails, **stop**: report it and do not push. Fix only if the user asks.
 
 ## 8. Update local-branch state
 
-Update `.jira-plans/<TICKET-ID>/local-branch.md` (if it exists): set `status:
+Update `.ai-workspace/jira-plans/<TICKET-ID>/local-branch.md` (if it exists): set `status:
 fast-tracked-to-release`, and add `release_branch: <release-branch>` and `release_pr_url:
 <pr-url>` fields. Leave the file in place rather than deleting it — `main` still needs this fix
 via `/w-4-2-cherrypick-to-main`.

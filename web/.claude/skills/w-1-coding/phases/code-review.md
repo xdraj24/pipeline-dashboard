@@ -1,149 +1,141 @@
-# Phase: Two-Model Code Review Loop
+# Phase: Code Review Panel
 
 Input from `SKILL.md`: a single ticket id.
 
-This runs a review/fix loop between two independent models so the fixer isn't grading its own
-work: the **reviewer** role plays the staff-level reviewer, the **fixer** role acts on the
-findings (`.claude/skills/_shared/host-runtime.md` § Delegation roles says how each host runs
-them and which models they map to). Repeat up to **3 rounds**. If it's not clean after 3 rounds,
-or the loop is clearly spiraling, stop and ask the developer — never loop forever and never
-silently give up.
-
-A host without delegation does both the review and the fix itself in the same session — it
-loses the independence of a second model checking the first one's work, so it treats the loop as
-a single self-review pass and says so when reporting back. Always report which model ran each
-role.
+The specialist panel in `.claude/skills/_shared/review-panel.md` reviews the ticket's diff. This
+session is the **conductor**: it picks the seats the diff needs, triages every finding, and sends
+the accepted ones to the **fixer** role, so neither the reviewers nor the conductor grade their
+own fixes. Up to **5 rounds**. If it's not clean after 5 rounds, or the loop is clearly
+spiraling, escalate (step 5) — never loop forever and never silently give up. Always report which
+model ran each role.
 
 ## 1. Gather context
 
-- `git status` and `git diff origin/main` (working tree included; read untracked new files too)
-  to get the full diff for this ticket's branch. On the first pass nothing is committed yet; on
-  a re-review after the qa-check phase changed code, the diff covers the commit plus the
-  uncommitted QA fixes — review all of it, with `.jira-plans/<TICKET-ID>/qa-check.md` as extra
-  context for what changed and why.
+- `git status` and `git diff origin/main --stat` (working tree included, untracked new files
+  too). On the first pass nothing is committed yet; on a re-review after the qa-check phase
+  changed code, the diff covers the commit plus the uncommitted QA fixes, and
+  `.ai-workspace/jira-plans/<TICKET-ID>/qa-check.md` says what changed and why.
 - If the diff is empty, stop and tell the developer there's nothing to review yet.
-- Read `.jira-plans/<TICKET-ID>/plan.md` if it exists (ticket requirements + Implementation Log
-  from the implement phase) for context. Not fatal if missing — proceed with the diff alone.
+- Read `.ai-workspace/jira-plans/<TICKET-ID>/plan.md` if it exists (ticket requirements +
+  Implementation Log). Not fatal if missing.
+- `W="${PIPELINE_CONTAINER_WORKDIR:-/app}"` as `.claude/skills/_shared/run-checks.md` says.
 
-## 2. Run the loop (round = 1)
+## 2. Pick the seats
 
-### a. Review (reviewer role)
+`review-panel.md` § 1, on the full diff. The seats picked here run in round 1.
 
-Delegate to the **reviewer** role and wait for the result (you need it before continuing).
-Prompt:
+Environment block for every seat:
 
-> You are a staff/principal-level engineer doing a thorough code review of the diff below for
-> ticket `<TICKET-ID>` in this Rails + React + Go monorepo. Judge against this repo's actual
-> conventions (root, `frontend/`, and `backend/app/` `CLAUDE.md` files) — not generic style
-> opinions.
->
-> Look for: correctness bugs, edge cases, security issues (OWASP top 10), missing or wrong
-> tests, dead code, and violations of repo conventions. Do not nitpick pure style already
-> enforced by Biome/RuboCop.
->
-> Two things reviewers in this repo reject on every time, so flag them as **major**:
-> 1. **Comment volume.** Code here is expected to be self-explanatory. Any comment that narrates
->    what the code does, restates a name, explains the diff, or runs longer than two lines is a
->    finding — say whether it should be deleted or shortened to its one load-bearing sentence.
->    Comments in test files are always a finding. Only a non-obvious trap, quirk, or magic-value
->    origin earns one, at roughly one per file.
-> 2. **Ignoring an existing seam.** New code that reimplements a structure the repo already has
->    — e.g. a GraphQL resolver holding query logic instead of delegating to an `ApplicationQuery`
->    object under `backend/app/queries/`. Name the existing example it should follow.
->
-> Ticket context: `<plan.md contents, or "no plan available">`
->
-> Diff:
-> ```
-> <the diff/new files>
-> ```
->
-> Report findings as a numbered list, each with: file:line, severity (blocker/major/minor), and
-> a one-sentence description of the concrete failure scenario. If a finding from a previous
-> round (given below, if any) is still unresolved, say so explicitly instead of re-describing it
-> fresh.
->
-> Previous rounds' findings (if any): `<prior findings, or "none - first round">`
->
-> End your response with **exactly one** of these as the final line, nothing after it:
-> `STATUS: GREEN` (no blocker/major findings remain) or `STATUS: FINDINGS` (blocker/major
-> findings remain).
+> - Diff: get it yourself, `git diff origin/main` plus every untracked file `git status
+>   --porcelain` shows (in a pipeline worktree, the pathspec in
+>   `.claude/skills/_shared/run-checks.md`). The code is the current checkout.
+> - Intent: `.ai-workspace/jira-plans/<TICKET-ID>/plan.md` and, if present, `qa-check.md`;
+>   ticket attachments in `.ai-workspace/jira-plans/<TICKET-ID>/attachments/`.
+> - Frontend commands: `docker exec -w "<W>/frontend" web-spa-1 <command>`. Backend commands:
+>   `docker exec -e TEST_ENV_NUMBER -w "<W>/backend" web-web-1 <command>`
+>   (`.claude/skills/_shared/run-checks.md`).
 
-- If `STATUS: GREEN` → go to step 3 (done).
-- If `STATUS: FINDINGS` → continue to step b.
+## 3. Run the loop (round = 1)
 
-### b. Spiral check
+### a. Review
 
-Before spawning the fixer, compare this round's findings to findings from **two rounds ago**
-(not the immediately previous round). If the same finding (same file/line/issue) is showing up
-again after already having been "fixed" in between, that's a spiral — stop the loop now and go
-straight to step 4 (escalate), don't spend another round on it.
+Spawn the seats for this round as `review-panel.md` § 2 says. Round 2 and later run the linter,
+staff, and every seat that had a finding triaged **fix** in the previous round, but never a seat
+§ 2 skipped.
 
-### c. Fix (fixer role)
+### b. Triage
+
+`review-panel.md` § 3. No finding triaged **fix** left at blocker or major → `STATUS: GREEN`, go
+to step 4. Otherwise `STATUS: FINDINGS`, continue.
+
+### c. Spiral check
+
+Compare this round's **fix** findings with those from **two rounds ago**. If the same finding
+(same file/line/issue) is back after having been fixed in between, that's a spiral: stop and go
+to step 5.
+
+### d. Fix (fixer role)
 
 Delegate to the **fixer** role and wait for the result. Prompt:
 
-> A staff engineer reviewed your implementation for ticket `<TICKET-ID>` and found the issues
-> below. Fix each one directly in the working tree — minimal, targeted changes, following this
-> repo's conventions (root, `frontend/`, `backend/app/` `CLAUDE.md`). Re-run the lint/tests for
-> anything you touch exactly as `.claude/skills/_shared/run-checks.md` describes (foreground
-> only, container paths from that doc) and make sure they pass. Do not skip or disable a failing
-> test to make it pass.
+> Code reviewers checked your implementation for ticket `<TICKET-ID>` and the findings below
+> were accepted. Fix each one directly in the working tree with minimal, targeted changes,
+> following this repo's conventions (root, `frontend/`, `backend/app/` `CLAUDE.md`). Re-run the
+> lint/tests for anything you touch exactly as `.claude/skills/_shared/run-checks.md` describes
+> (foreground only, container paths from that doc) and make sure they pass. Do not skip or
+> disable a failing test to make it pass. Fix nothing that isn't on this list.
 >
-> Findings to address:
+> Findings to fix:
 > ```
-> <the numbered findings from step a>
+> <the findings triaged "fix", with ids>
 > ```
 >
-> Report back what you changed and the result of any lint/test run.
+> Report back what you changed per finding id and the result of every lint/test run.
 
-- Increment round. If round > 3, go to step 4 (escalate) regardless of outcome.
-- Otherwise go back to step a for the next review round, passing this round's findings as
-  "previous rounds' findings".
+Increment round. Round > 5 → step 5. Otherwise back to step a, passing every finding so far with
+its triage and the fixer's report as "previous rounds".
 
-## 3. Success
+## 4. Success
 
-All clean. Append a short entry to `.jira-plans/<TICKET-ID>/code-review.md` (create if needed):
-round count, final `STATUS: GREEN`, the models that ran the reviewer and fixer roles, and any
-minor findings left unfixed (the commit phase carries them into `change-notes.md`). Report that the review passed; the next phase is commit
+Raise the follow-up bugs collected across all rounds, per
+`.claude/skills/_shared/raise-follow-up-bug.md`.
+
+Append to `.ai-workspace/jira-plans/<TICKET-ID>/code-review.md` (create if needed):
+
+```
+## Review <UTC date and time>
+
+- Rounds: <n>
+- Seats: <each seat: run in rounds <list>, or skipped (<reason>)>
+- Models: checker: <model>; reviewer: <model>; fixer: <model, or "not used">
+
+### Fixed
+- <id> <severity> <file:line> — <finding, one line> — <what the fixer changed>   ("None")
+
+### Won't fix
+- <id> <severity> <file:line> — <finding, one line> — <reason>   ("None")
+
+### Follow-up bugs
+- <id> — <JIRA-KEY> (new | existing) — <summary>   ("None"; `not raised (<reason>)` on failure)
+
+STATUS: GREEN
+```
+
+Report the round count, the seats run and skipped, the models per role, the counts per bucket
+and any follow-up bug keys with their URLs (`<jira_browse>/<KEY>`). The next phase is commit
 (`/w-1-coding <TICKET-ID> just-commit` when run on its own).
 
-## 4. Escalation
+## 5. Escalation
 
-Triggered when the round cap is reached (round > 3) or step 2b detected a spiral.
+Triggered when the round cap is reached (round > 5) or step 3c detected a spiral. Raise the
+follow-up bugs collected so far either way; they don't depend on the outcome.
 
 **Interactive (no `PIPELINE_MODE` set):**
 
-Stop. Do not attempt another round. Show the developer:
+Stop. Do not attempt another round. Show the developer how many rounds ran, why it stopped
+(cap vs. spiral), and the open **fix** findings verbatim. Ask how they want to proceed via
+`.claude/skills/_shared/slack-escalation.md`; don't keep fixing on your own past this point.
+Append the same information to `code-review.md`, in step 4's format with `STATUS: FINDINGS`,
+before stopping.
 
-- How many rounds ran, and why it stopped (round cap reached vs. spiral detected).
-- The current outstanding findings verbatim.
+**Unattended or supervised (`PIPELINE_MODE` is `unattended` or `supervised`):**
 
-Ask how they want to proceed, via `.claude/skills/_shared/slack-escalation.md` — do not guess or
-keep fixing on your own past this point. Append the same information to
-`.jira-plans/<TICKET-ID>/code-review.md` before stopping.
+Don't ask anyone, not even in Slack; this is a code-quality judgment call, not a business
+question, so it's best-guess-and-log only:
 
-**Unattended (`PIPELINE_MODE=unattended`):**
-
-Don't ask anyone, not even in Slack — unlike a missing requirement, this isn't a business
-question for a human to answer, it's a code-quality judgment call, so it's best-guess-and-log
-only:
-
-- Run one more fixer pass (step 2c) against the current outstanding findings — this is the
-  fixer's **best remaining attempt**, not another full review round, so don't re-review it
-  afterward.
-- Ensure `.jira-plans/<TICKET-ID>/code-review.md` has a frontmatter block, adding one if it
-  doesn't exist yet:
+- Run one more fixer pass (step 3d) against the open **fix** findings. This is the fixer's
+  best remaining attempt, not another round, so don't re-review it.
+- Ensure `code-review.md` starts with a frontmatter block, updating `status:` in place if one
+  exists:
   ```
   ---
   ticket: <TICKET-ID>
   status: needs-manual-review
   ---
   ```
-  (If the file already has frontmatter from a previous run, update `status:` to
-  `needs-manual-review` in place rather than duplicating the block.)
-- Append a `## Unresolved at pipeline completion` section: how many rounds ran and why it stopped
-  (cap vs. spiral), then whatever findings remain after the extra fix attempt, verbatim
-  (file:line, severity, description).
-- Do **not** stop — report success so the pipeline continues to the commit stage. A human
+- Append step 4's entry with `STATUS: FINDINGS`, followed by a
+  `## Unresolved at pipeline completion` section: how many rounds ran and why it stopped, then
+  the findings still open after the extra fixer pass, verbatim (id, file:line, severity,
+  description).
+- Do **not** stop: report success so the pipeline continues to the commit stage. A human
   reviews this via `/w-3-land-branch` before anything reaches a non-draft PR.

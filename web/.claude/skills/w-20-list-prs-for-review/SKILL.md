@@ -1,6 +1,6 @@
 ---
 name: w-20-list-prs-for-review
-description: List open, non-draft PRs by other developers with no human review activity yet (bot/CI comments don't count), optionally filtered to frontend- or backend-heavy, saved to .pr-reviews/candidates.md. Use to find PRs waiting on a first review.
+description: List open, non-draft PRs by other developers with no human review activity yet (bot/CI comments don't count), optionally filtered to frontend- or backend-heavy, saved to .ai-workspace/pr-reviews/candidates.md. Use to find PRs waiting on a first review.
 argument-hint: "[fe|be]"
 model: sonnet
 effort: medium
@@ -20,7 +20,7 @@ Anything else in `$ARGUMENTS` → ask the developer to clarify (only `fe`, `be`,
 valid), via `.claude/skills/_shared/slack-escalation.md` like every other question in these
 skills.
 
-Output goes to `.pr-reviews/candidates.md` (gitignored like `.jira-plans/`; create the folder if
+Output goes to `.ai-workspace/pr-reviews/candidates.md` (excluded from git like the rest of `.ai-workspace/`; create the folder if
 it doesn't exist).
 
 ## 1. Resolve repo + identity
@@ -94,12 +94,12 @@ Apply the argument's filter now: `fe` → keep only `frontend`-classified PRs; `
 
 ## 5. Best-effort JIRA ticket
 
-Look for an `XWWP-\d+` pattern in the PR title first, then in the branch name (`headRefName`). If
+Look for a `ticket_pattern` match (`host-runtime.md`) in the PR title first, then in the branch name (`headRefName`). If
 neither matches, leave the field blank — don't guess a ticket id.
 
 ## 6. Write the candidate list
 
-Write (overwrite) `.pr-reviews/candidates.md`:
+Write (overwrite) `.ai-workspace/pr-reviews/candidates.md`:
 
 ```
 ---
@@ -112,7 +112,7 @@ repo: <owner>/<repo>
 
 | PR | Title | Author | Branch | Area | JIRA | Link |
 |----|-------|--------|--------|------|------|------|
-| #<number> | <title> | <author login> | `<headRefName>` | <frontend/backend/mixed> | [<TICKET>](https://welligence.atlassian.net/browse/<TICKET>) or — | <PR url> |
+| #<number> | <title> | <author login> | `<headRefName>` | <frontend/backend/mixed> | [<TICKET>](<jira_browse>/<TICKET>) or — | <PR url> |
 ```
 
 Sort by PR number ascending.

@@ -6,8 +6,8 @@ number, confirmed open.
 
 - `gh repo view --json nameWithOwner -q .nameWithOwner` → `<owner>/<repo>` (not needed for a
   full URL).
-- **Ticket id** (`XWWP-\d+`):
-  1. `.jira-plans/<TICKET-ID>/local-branch.md` — use `pr_url` (from `/w-4-publish`) or
+- **Ticket id** (matches `ticket_pattern`, `host-runtime.md`):
+  1. `.ai-workspace/jira-plans/<TICKET-ID>/local-branch.md` — use `pr_url` (from `/w-4-publish`) or
      `release_pr_url` (from `/w-4-1-fast-track-push-to-release`). Both present → ask which.
   2. Neither → `gh pr list --search "<TICKET-ID> in:title" --state open --json number,url,headRefName`.
      Zero or more than one result → tell the user and ask for the PR link or number.

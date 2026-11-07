@@ -1,7 +1,7 @@
 ---
 name: w-0-create-jira-task
-description: Create a new XWWP JIRA ticket (asks assignee, bug/feature, backlog/sprint, estimates story points) or, given a ticket id, refine a thin ticket's description through a short Q&A. Use before planning or implementing a ticket.
-argument-hint: "[short description of the task] | XWWP-XXXX"
+description: Create a new Jira ticket (asks assignee, bug/feature, backlog/sprint, estimates story points) or, given a ticket id, refine a thin ticket's description through a short Q&A. Either mode attaches screenshots, PDFs or other files whose paths are passed. Use before planning or implementing a ticket.
+argument-hint: "[short description of the task] [file...] | <TICKET-ID> [file...]"
 model: sonnet
 effort: low
 ---
@@ -13,7 +13,11 @@ Argument: `$ARGUMENTS`.
 Host-specific mechanics (arguments, invoking other skills, delegation, asking the developer):
 `.claude/skills/_shared/host-runtime.md`.
 
-- Matches an existing ticket id (`XWWP-\d+`, case-insensitive) → **Refine mode**: go to
+- Tokens that are paths to existing files (screenshots, PDFs, logs) are **attachments**, not part
+  of the description. Resolve each against the current directory, check it exists, and stop
+  with the missing path named if one does not. Uploads go through the helper in
+  `.claude/skills/_shared/host-runtime.md` § JIRA attachments.
+- First token matches an existing ticket id (`ticket_pattern`, case-insensitive; `host-runtime.md`) → **Refine mode**: go to
   "Refine an Existing Ticket" below. This is what the developer wants when they already filed a
   thin ticket and now wants it fleshed out before `/w-1-coding`'s plan phase has to guess at it.
 - Anything else → **Create mode**: a new ticket, described below. If `$ARGUMENTS` is missing
@@ -26,7 +30,7 @@ otherwise).
 
 ## Create Mode
 
-Create a new ticket in the `XWWP` JIRA project, ready to feed into `/w-1-coding`.
+Create a new ticket in the Jira project (`project key` from `ticket_pattern`, `host-runtime.md`), ready to feed into `/w-1-coding`.
 
 ### 1. Gather ticket content
 
@@ -54,7 +58,7 @@ with the options numbered so the reply can be a short pick (see
   session).
 - **Assignee account id** (only if "Assign to me"): `mcp__atlassian__atlassianUserInfo` for the
   current user's account id.
-- **Issue type name**: `mcp__atlassian__getJiraProjectIssueTypesMetadata` for project `XWWP`.
+- **Issue type name**: `mcp__atlassian__getJiraProjectIssueTypesMetadata` for the project key.
   - "Bug" → the type literally named `Bug`.
   - "Feature" → prefer `Story`; fall back to `Task` if the project has no `Story` type.
 - **Story points field id**: `mcp__atlassian__getJiraIssueTypeMetaWithFields` for the resolved
@@ -63,7 +67,7 @@ with the options numbered so the reply can be a short pick (see
   type's screen, skip setting it and mention that in the final report.
 - **Current sprint id** (only if "Current sprint" was chosen):
   `mcp__atlassian__searchJiraIssuesUsingJql` with
-  `jql: "project = XWWP AND sprint in openSprints()"`, `fields: ["sprint"]`, `maxResults: 1`.
+  `jql: "project = <key> AND sprint in openSprints()"`, `fields: ["sprint"]`, `maxResults: 1`.
   - Read the `sprint` field off the returned issue (or whichever field in the response carries
     sprint data) and take the id of the sprint whose state is active.
   - If no issues are currently in an open sprint (so there's nothing to read the field/sprint id
@@ -86,16 +90,21 @@ described scope and, if you can tell from the description, how many layers of th
 
 Call `mcp__atlassian__createJiraIssue`:
 
-- `cloudId`, `projectKey: "XWWP"`, `issueTypeName` (from step 3), `summary`, `description`
+- `cloudId`, `projectKey: "<key>"`, `issueTypeName` (from step 3), `summary`, `description`
   (step 1).
 - `assignee_account_id` — only if "Assign to me" was chosen.
 - `additional_fields` — the story points field id set to the step 4 estimate, plus the sprint
   field id set to the resolved sprint id if "Current sprint" was chosen and one was found.
 
-### 6. Report back
+### 6. Attach files
 
-Show: the new ticket id and URL (`https://welligence.atlassian.net/browse/<TICKET-ID>`), the
-issue type, assignee (or "unassigned"), placement (backlog/sprint, and if a requested sprint
+Only if attachments were given: `"$JA" upload <TICKET-ID> <file>...`. If the upload fails, the
+ticket still stands. Report which files did not attach rather than retrying in a loop.
+
+### 7. Report back
+
+Show: the new ticket id and URL (`<jira_browse>/<TICKET-ID>`), the
+issue type, assignee (or "unassigned"), the attached filenames, placement (backlog/sprint, and if a requested sprint
 placement fell back to backlog, say so), and the story point estimate with a one-line reason.
 
 Suggest the natural next step: `/w-1-coding <TICKET-ID>` (or `… just-plan` to only plan it).
@@ -114,6 +123,8 @@ creates a second ticket; it edits the one given.
   rather than falling back to Create mode.
 - Show the developer the current summary and description verbatim before asking anything, so
   they're working from the same text you are.
+- Download the existing attachments into the scratch directory (`"$JA" download <TICKET-ID>
+  <dir>`) and open every image and PDF.
 
 ### 2. Find the real gaps
 
@@ -126,9 +137,9 @@ guessing (see `.claude/skills/w-1-coding/phases/plan.md`):
 - **Repro / current vs. expected behavior** (bugs only) — steps to reproduce, what happens now,
   what should happen instead.
 - **Dependencies** — other tickets, PRs, or external work this is blocked by or blocks.
-- **Attachments** — the Atlassian MCP tools return text/ADF only, never attachment binary content.
-  If the description references a screenshot, recording, or other attached file, you cannot see
-  what it shows — never guess its content.
+- **Attachments** — use what the downloaded images and PDFs show. Anything you could not open
+  (video, external links, every attachment if the helper failed) is a gap, so never guess its
+  content.
 
 Only flag sections that are genuinely thin or missing. A ticket that already states acceptance
 criteria clearly doesn't need a question about it — don't run the developer through a rote
@@ -141,7 +152,8 @@ others in one message rather than asked one at a time. For a flagged attachment,
 to paste its content or describe it in text — don't proceed on that section until they do, since
 guessing at an unseen screenshot is exactly the failure the plan phase is built to avoid.
 
-If step 2 found no real gaps, say so and skip straight to step 7 — nothing to change.
+If step 2 found no real gaps, say so and skip the description steps (4 to 6). Files passed as
+attachments are still uploaded in step 6b.
 
 ### 4. Draft the enriched description
 
@@ -162,8 +174,13 @@ not acceptable. Let them request changes and re-show until they approve.
 assignee, type, sprint, or story points in Refine mode; that's Create mode's job for a different
 ticket, and this one's metadata was already deliberately set when it was filed.
 
+### 6b. Attach files
+
+Only if attachments were given: `"$JA" upload <TICKET-ID> <file>...`. They need no confirmation
+step, since the developer named them in the invocation.
+
 ### 7. Report back
 
-Show the ticket id and URL, and a one-line summary of what was added or clarified (e.g. "added
-acceptance criteria and flagged the login-flow dependency on XWWP-1200"). Suggest the natural next
+Show the ticket id and URL, the attached filenames, and a one-line summary of what was added or clarified (e.g. "added
+acceptance criteria and flagged the login-flow dependency on another ticket"). Suggest the natural next
 step: `/w-1-coding <TICKET-ID>`.

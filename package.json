@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.ts",
-    "dev": "node --watch-path=./server.ts --watch-path=./lib server.ts"
+    "dev": "node --watch-path=./server.ts --watch-path=./lib server.ts",
+    "test": "node --test lib/*.test.ts"
   }
 }

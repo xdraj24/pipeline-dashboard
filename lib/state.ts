@@ -2,9 +2,10 @@ import { collectAssumptions, listPlannedTickets, readPrReviews, readTicketArtifa
 import { ghStatus, prInfo, prNumberForBranch, prNumberFromUrl, prNumbersForTicket, repoSlug, type PrInfo } from './github.ts';
 import { SPRINT_JQL, jiraConfig, jiraIssue, jiraSprintIssues, type JiraIssue, type SprintIssue } from './jira.ts';
 import { isRunning, listLaunches, type Launch } from './launch.ts';
-import { readHeadlessAgents, readLocalBranches, readRuns, readSlots, readWorktrees, type HeadlessAgent, type LocalBranch, type PipelineRun, type RunTicket, type Slot, type StageEvent, type Worktree } from './pipeline.ts';
+import { readHeadlessAgents, readLocalBranches, readQaStack, readRuns, readSlots, readWorktrees, type HeadlessAgent, type LocalBranch, type PipelineRun, type QaStack, type RunTicket, type Slot, type StageEvent, type Worktree } from './pipeline.ts';
 import { listQuestions, type Question } from './questions.ts';
 import { ARCHIVE_JIRA_STATUSES, archiveTicket, listArchivedTickets, readArchived, type Archived } from './archive.ts';
+import { ticketProgress, ticketStatus, type TicketStatus } from './ticket-status.ts';
 import type { Cached } from './util.ts';
 
 export type StageState = 'done' | 'active' | 'failed' | 'pending' | 'skipped' | 'warn';
@@ -13,11 +14,11 @@ export type NextStep = { command: string | null; reason: string; urgency: 'now' 
 export type PrView = { number: number; role: 'main' | 'release' | 'cherrypick'; info: Cached<PrInfo> };
 
 export type TicketView = {
-  ticket: string; title: string | null; artifacts: TicketArtifacts; assumptions: Assumption[]; stages: Stage[]; nextStep: NextStep;
+  ticket: string; title: string | null; artifacts: TicketArtifacts; assumptions: Assumption[]; stages: Stage[]; status: TicketStatus; nextStep: NextStep;
   jira: Cached<JiraIssue> | null; prs: PrView[]; worktree: Worktree | null; branches: LocalBranch[]; slot: Slot | null; agents: HeadlessAgent[];
   latestRun: { runId: string; ticket: RunTicket } | null; questions: Question[]; openQuestions: number; lastActivity: string | null;
   models: { reviewer: string; fixer: string; planner: string; qa: string; orchestrator: string };
-  archived: Archived | null; sprint: { name: string | null; mine: boolean; rank: number } | null; covered: boolean; launches: Launch[];
+  archived: Archived | null; sprint: { name: string | null; mine: boolean; rank: number } | null; covered: boolean; launches: Launch[]; testUrl: string | null;
 };
 
 export type DashboardState = {
@@ -53,7 +54,31 @@ function resolvePrs(a: TicketArtifacts, branches: LocalBranch[], sprintOnly: Spr
   return out;
 }
 
-function buildStages(v: Omit<TicketView, 'stages' | 'nextStep' | 'models'>): Stage[] {
+const POST_IMPLEMENT = ['code-review', 'commit', 'qa-check', 'land', 'publish'];
+const PRE_LAND = ['plan', 'implement', 'code-review', 'commit', 'qa-check'];
+
+export function settleRunningStages(stages: Stage[], runLive: boolean): void {
+  const at = (key: string) => stages.find((s) => s.key === key);
+  const impl = at('implement');
+  if (impl && impl.state !== 'failed' && impl.state !== 'active') {
+    const later = stages.filter((s) => POST_IMPLEMENT.includes(s.key));
+    if (later.some((s) => s.state !== 'pending' && s.state !== 'skipped')) impl.state = at('code-review')?.state === 'active' ? 'active' : 'done';
+  }
+  const land = at('land');
+  const running = stages.find((s) => PRE_LAND.includes(s.key) && s.state === 'active') ?? (runLive && at('qa-check')?.state === 'pending' ? at('qa-check') : null);
+  if (land?.state === 'warn' && running) land.state = 'pending', land.detail = `waits for ${running.label}`;
+}
+
+export function qaTestUrl(ticket: string, stages: Stage[], branch: string | null, head: string | null, stack: QaStack | null): string | null {
+  if (!stack?.branch || !branch || stack.branch !== branch) return null;
+  if (stack.lockedBy && stack.lockedBy !== ticket) return null;
+  if (head && stack.sha && !stack.sha.startsWith(head) && !head.startsWith(stack.sha)) return null;
+  if (stages.some((s) => PRE_LAND.includes(s.key) && s.state === 'active')) return null;
+  const qa = stages.find((s) => s.key === 'qa-check')?.state;
+  return qa === 'done' || qa === 'warn' ? stack.url : null;
+}
+
+function buildStages(v: Omit<TicketView, 'stages' | 'status' | 'nextStep' | 'models' | 'testUrl'>): Stage[] {
   const a = v.artifacts;
   const run = v.latestRun?.ticket;
   const runStage = (name: string) => run?.stages.filter((s) => s.stage === name).at(-1) ?? null;
@@ -125,11 +150,12 @@ function buildStages(v: Omit<TicketView, 'stages' | 'nextStep' | 'models'>): Sta
   if (lbStatus === 'fast-tracked-to-release') merged.detail = [merged.detail, `fast-tracked to ${a.localBranch?.frontmatter.release_branch ?? 'release'}`].filter(Boolean).join(' · ');
 
   const stages = [plan, impl, review, commit, qa, land, publish, reviewed, merged];
+  settleRunningStages(stages, !!(run?.running || v.agents.length));
   if (!a.plan && !a.localBranch && mainPr) for (const st of [plan, impl, review, commit, qa, land]) if (st.state === 'pending') st.state = 'skipped', st.detail = 'not run through the skills';
   return stages;
 }
 
-function archiveReason(v: Omit<TicketView, 'stages' | 'nextStep' | 'models' | 'archived'>): string | null {
+function archiveReason(v: Omit<TicketView, 'stages' | 'status' | 'nextStep' | 'models' | 'archived' | 'testUrl'>): string | null {
   const j = v.jira?.value;
   if (!j || !ARCHIVE_JIRA_STATUSES.includes(j.status)) return null;
   const lb = v.artifacts.localBranch;
@@ -161,7 +187,7 @@ function browserRerunNote(qa: QaCheckArtifact | null, t: string): string {
   return ` QA had no browser pass (${qa.browser}); once landed, start the app and run /w-1-coding ${t} just-qa-check here.`;
 }
 
-function suggestNextStep(v: Omit<TicketView, 'nextStep' | 'models'>): NextStep {
+function suggestNextStep(v: Omit<TicketView, 'status' | 'nextStep' | 'models' | 'testUrl'>): NextStep {
   const a = v.artifacts;
   const t = v.ticket;
   const mainPr = v.prs.find((p) => p.role === 'main')?.info.value ?? null;
@@ -257,8 +283,8 @@ function suggestNextStep(v: Omit<TicketView, 'nextStep' | 'models'>): NextStep {
 
 export async function buildState(opts: { sprint?: 'mine' | 'all' } = {}): Promise<DashboardState> {
   const sprintFilter = opts.sprint === 'all' ? 'all' : 'mine';
-  const [planned, runs, worktrees, slots, agents, questions, branches, prReviews, jira, sideArchived, launches] = await Promise.all([
-    listPlannedTickets(), readRuns(), readWorktrees(), readSlots(), readHeadlessAgents(), listQuestions(), readLocalBranches(), readPrReviews(), jiraConfig(), listArchivedTickets(), listLaunches(),
+  const [planned, runs, worktrees, slots, agents, questions, branches, prReviews, jira, sideArchived, launches, qaStack] = await Promise.all([
+    listPlannedTickets(), readRuns(), readWorktrees(), readSlots(), readHeadlessAgents(), listQuestions(), readLocalBranches(), readPrReviews(), jiraConfig(), listArchivedTickets(), listLaunches(), readQaStack(),
   ]);
   const sprintCache = jira.configured ? jiraSprintIssues() : null;
   const sprintAll = sprintCache?.value ?? [];
@@ -293,6 +319,8 @@ export async function buildState(opts: { sprint?: 'mine' | 'all' } = {}): Promis
     if (base.jira?.value?.summary && !base.title) base.title = base.jira.value.summary;
     const stages = buildStages(base);
     const nextStep = suggestNextStep({ ...base, stages });
+    const branch = artifacts.localBranch?.branch ?? null;
+    const testUrl = qaTestUrl(ticket, stages, branch, base.worktree?.head ?? tBranches.find((b) => b.name === branch)?.sha ?? null, qaStack);
     const cr = artifacts.codeReview?.models;
     const qm = artifacts.qaCheck?.models;
     let archived = await readArchived(ticket);
@@ -300,11 +328,11 @@ export async function buildState(opts: { sprint?: 'mine' | 'all' } = {}): Promis
       const reason = archiveReason(base);
       if (reason) archived = await archiveTicket(ticket, reason);
     }
-    tickets.push({ ...base, stages, nextStep, models: { reviewer: cr?.reviewer ?? 'unknown', fixer: cr?.fixer ?? qm?.fixer ?? 'unknown', planner: cr?.planner ?? 'unknown', qa: qm?.qa ?? 'unknown', orchestrator: 'sonnet (w-1-coding SKILL.md)' }, archived });
+    tickets.push({ ...base, stages, status: ticketStatus(stages), nextStep, models: { reviewer: cr?.reviewer ?? 'unknown', fixer: cr?.fixer ?? qm?.fixer ?? 'unknown', planner: cr?.planner ?? 'unknown', qa: qm?.qa ?? 'unknown', orchestrator: 'sonnet (w-1-coding SKILL.md)' }, archived, testUrl });
   }
   const rank = (t: TicketView) => (t.openQuestions ? 0 : t.slot || t.agents.length || t.latestRun?.ticket.running || t.launches.some(isRunning) ? 1 : !t.covered ? (t.sprint?.mine ? 6 : 7) : t.nextStep.urgency === 'now' ? 2 : t.nextStep.urgency === 'soon' ? 3 : t.nextStep.urgency === 'wait' ? 4 : 5);
   const live = tickets.filter((t) => !t.archived);
-  live.sort((a, b) => rank(a) - rank(b) || ((a.sprint?.rank ?? 1e9) - (b.sprint?.rank ?? 1e9)) || (b.lastActivity ?? '').localeCompare(a.lastActivity ?? ''));
+  live.sort((a, b) => ticketProgress(b.stages) - ticketProgress(a.stages) || rank(a) - rank(b) || ((a.sprint?.rank ?? 1e9) - (b.sprint?.rank ?? 1e9)) || (b.lastActivity ?? '').localeCompare(a.lastActivity ?? ''));
   const archived = tickets.filter((t) => t.archived).sort((a, b) => b.archived!.at.localeCompare(a.archived!.at));
   const sprint = {
     jql: SPRINT_JQL, filter: sprintFilter, total: sprintCache?.value ? sprintAll.length : null, mine: sprintCache?.value ? sprintAll.filter((i) => i.mine).length : null,

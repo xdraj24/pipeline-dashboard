@@ -15,6 +15,7 @@ function webRootFromEnvFile(): string | undefined {
 export const REPO_ROOT = path.resolve(
   process.env.PIPELINE_REPO_ROOT ?? process.env.WEB_REPO_ROOT ?? webRootFromEnvFile() ?? path.join(DASHBOARD_DIR, '..', 'web'),
 );
+export const WORKSPACE_DIR = path.join(REPO_ROOT, '.ai-workspace');
 export const DATA_DIR = path.join(DASHBOARD_DIR, 'data');
 
 export type Frontmatter = Record<string, string>;

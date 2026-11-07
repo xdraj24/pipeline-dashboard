@@ -7,8 +7,8 @@
 #
 # Usage: ./claim-slot.sh <repo-root> <ticket-id>
 #
-# On success: creates .claude/pipeline-slots/<N>/{ticket,started_at}, writes
-# .claude/pipeline-slots/.owner-<TICKET-ID> with the claimed slot number, and
+# On success: creates .ai-workspace/pipeline-slots/<N>/{ticket,started_at}, writes
+# .ai-workspace/pipeline-slots/.owner-<TICKET-ID> with the claimed slot number, and
 # prints the slot number on stdout.
 
 set -euo pipefail
@@ -24,7 +24,7 @@ fi
 
 REPO_ROOT="$1"
 TICKET_ID="$2"
-SLOTS_DIR="$REPO_ROOT/.claude/pipeline-slots"
+SLOTS_DIR="$REPO_ROOT/.ai-workspace/pipeline-slots"
 
 mkdir -p "$SLOTS_DIR"
 

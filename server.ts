@@ -5,7 +5,7 @@ import { buildState } from './lib/state.ts';
 import { readTicketArtifacts } from './lib/artifacts.ts';
 import { readRuns, tailFile } from './lib/pipeline.ts';
 import { answerQuestion, createQuestion, getQuestion, listQuestions, patchQuestion } from './lib/questions.ts';
-import { DASHBOARD_DIR, REPO_ROOT, clearCache, readText } from './lib/util.ts';
+import { DASHBOARD_DIR, REPO_ROOT, WORKSPACE_DIR, clearCache, readText } from './lib/util.ts';
 import { repoSlug, viewerLogin } from './lib/github.ts';
 import { getLaunch, launch, listLaunches, stopLaunch } from './lib/launch.ts';
 import { buildReviewDetail, buildReviewState, detailComments } from './lib/review-state.ts';
@@ -45,12 +45,12 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
     if (!Object.keys(flags).length) return json(res, 400, { error: 'flags {rowIndex: boolean} is required' });
     const table = await setPublishFlags(Number(m[1]), flags);
     if (!table) return json(res, 404, { error: 'no review.md' });
-    const text = await readText(path.join(REPO_ROOT, '.pr-reviews', `PR-${m[1]}`, 'review.md'));
+    const text = await readText(path.join(WORKSPACE_DIR, 'pr-reviews', `PR-${m[1]}`, 'review.md'));
     return json(res, 200, { pr: Number(m[1]), comments: detailComments(text, repoSlug().value, typeof body.ref === 'string' ? body.ref : null) });
   }
   if ((m = p.match(/^\/api\/reviews\/(\d+)\/file$/)) && method === 'GET') {
-    const text = await readText(path.join(REPO_ROOT, '.pr-reviews', `PR-${m[1]}`, 'review.md'));
-    return text === null ? json(res, 404, { error: 'no review.md' }) : json(res, 200, { pr: Number(m[1]), path: `.pr-reviews/PR-${m[1]}/review.md`, text });
+    const text = await readText(path.join(WORKSPACE_DIR, 'pr-reviews', `PR-${m[1]}`, 'review.md'));
+    return text === null ? json(res, 404, { error: 'no review.md' }) : json(res, 200, { pr: Number(m[1]), path: `.ai-workspace/pr-reviews/PR-${m[1]}/review.md`, text });
   }
 
   if ((m = p.match(/^\/api\/tickets\/([^/]+)\/artifact\/([^/]+)$/)) && method === 'GET') {
@@ -72,7 +72,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
   }
   if ((m = p.match(/^\/api\/runs\/([^/]+)\/progress$/)) && method === 'GET') {
     if (!/^\d{8}T\d{6}Z$/.test(m[1])) return json(res, 404, { error: 'bad run' });
-    const text = await readText(path.join(REPO_ROOT, '.claude', 'pipeline-logs', m[1], 'progress.log'));
+    const text = await readText(path.join(WORKSPACE_DIR, 'pipeline-logs', m[1], 'progress.log'));
     return json(res, 200, { runId: m[1], text: text ?? '' });
   }
 

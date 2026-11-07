@@ -1,7 +1,7 @@
 ---
 name: w-24-land-branch-for-review
-description: Check out another developer's PR (by XWWP ticket, PR link or number) on the second web stack, start it, hand it to you for visual testing, and on your confirmation comment "🦈 visually tested" on the PR. Use to test a PR in the running app before approving it.
-argument-hint: "<XWWP-XXXX|PR-link-or-number>"
+description: Check out another developer's PR (by Jira ticket, PR link or number) on the second web stack, start it, hand it to you for visual testing, and on your confirmation comment "🦈 visually tested" on the PR. Use to test a PR in the running app before approving it.
+argument-hint: "<TICKET-ID|PR-link-or-number>"
 model: sonnet
 effort: medium
 ---
@@ -17,7 +17,7 @@ Host-specific mechanics (arguments, invoking other skills, asking the developer)
 `.claude/skills/_shared/slack-escalation.md`. Stack rules: `docs/second-dev-stack.md` § For AI
 agents.
 
-Argument: `$ARGUMENTS` — required: an XWWP ticket id, a GitHub PR URL or a bare PR number. If
+Argument: `$ARGUMENTS` — required: a ticket id matching `ticket_pattern` (`host-runtime.md`), a GitHub PR URL or a bare PR number. If
 missing, ask for one before doing anything else.
 
 ## 1. Resolve the PR
@@ -56,7 +56,9 @@ Show, in one message:
 - **http://127.0.0.1:4000** (never `localhost:4000`: login breaks there, see the stack doc);
 - the PR body's Testing Instructions section verbatim, or "none in the PR";
 - the changed UI files (`gh pr diff <number> --name-only`, `frontend/` minus tests and stories) so
-  the developer knows where to look.
+  the developer knows where to look;
+- when `/w-21-review-prs` invoked this, its browser cases as a numbered checklist: path on
+  http://127.0.0.1:4000, steps, expected result.
 
 Then ask, via `slack-escalation.md`, with these options:
 
@@ -76,14 +78,16 @@ No timeout default: this waits for the developer, and nothing is posted without 
   gh pr comment <number> --body "🦈 visually tested"
   ```
 
-- **Found problems** → post nothing. Ask the developer to describe them, then offer
-  `/w-21-review-prs <number>` to turn them into review comments.
+- **Found problems** → post nothing. Ask the developer to describe them. Invoked from
+  `/w-21-review-prs` → return the description to it, which turns it into review comments.
+  Otherwise offer `/w-21-review-prs <number>` to do that.
 - **Stop** → post nothing.
 
 Leave the review stack running on the PR either way.
 
 ## 6. Report back
 
-One short block: PR link, the sha tested, the stack URL, and whether the "🦈 visually tested"
+Invoked from `/w-21-review-prs`: return the answer and any problem description to it, and skip
+this report. Otherwise one short block: PR link, the sha tested, the stack URL, and whether the "🦈 visually tested"
 comment was posted (with its URL), skipped as a duplicate, or not posted and why. When posted,
 the next step once the author addresses review comments is `/w-25-re-review-pr <number>`.

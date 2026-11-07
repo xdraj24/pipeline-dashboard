@@ -17,11 +17,11 @@ Argument: `$ARGUMENTS` — optional, one of:
 
 ## 1. Run the helper
 
-The skills folder is a symlink into the dashboard repo, which resolves it from the main checkout
-or a worktree:
+`_shared` is a symlink into the dashboard repo, which resolves it from the main checkout or a
+worktree:
 
 ```bash
-DASH="$(cd -P "$(git rev-parse --show-toplevel)/.claude/skills/../../.." && pwd)"
+DASH="$(cd -P "$(git rev-parse --show-toplevel)/.claude/skills/_shared/../../../.." && pwd)"
 "$DASH/bin/up.sh" $ARGUMENTS
 ```
 
@@ -29,8 +29,7 @@ The script starts `node server.ts` in the background when port 4848 does not ans
 to come up, prints the URL and opens it with `open` (macOS). It is idempotent: when the server is
 already running it only opens the page.
 
-If `$DASH/bin/up.sh` does not exist, `.claude/skills` is not linked from the pipeline-dashboard
-repo: say so, point at `/w-setup`, and stop.
+If `$DASH/bin/up.sh` does not exist, the skills are not linked from the pipeline-dashboard repo: say so, point at `/w-setup`, and stop.
 
 ## 2. Report back
 

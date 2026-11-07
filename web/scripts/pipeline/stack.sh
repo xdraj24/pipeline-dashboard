@@ -131,7 +131,7 @@ YML
 ensure_roles() {
   local f
   in_dir docker compose up -d --wait db >/dev/null
-  for f in "$DIR"/backend/db/users/*.sql; do
+  for f in "$DIR"/backend/db/users_v*.sql "$DIR"/backend/db/users/*.sql; do
     [ -f "$f" ] || continue
     in_dir docker compose exec -T -e PGOPTIONS="-c client_min_messages=warning" db psql -U postgres -d postgres -q -v ON_ERROR_STOP=1 <"$f" >/dev/null
   done
@@ -186,7 +186,6 @@ refresh() {
   [ -n "$before" ] && changed="$(git -C "$DIR" diff --name-only "$before" "$after" 2>/dev/null || echo all)"
   if [ -z "$before" ] || grep -q 'Gemfile.lock' <<<"$changed"; then
     in_dir docker compose exec -T web bundle install --quiet
-    in_dir docker compose restart web sidekiq
   fi
   if [ -z "$before" ] || grep -q 'pnpm-lock.yaml' <<<"$changed"; then
     in_dir docker compose exec -T spa pnpm install --frozen-lockfile
@@ -196,8 +195,11 @@ refresh() {
   if [ -z "$(in_dir docker compose ps -q --status running web)" ]; then
     in_dir docker compose up -d web
   fi
-  wait_http "http://127.0.0.1:$API_PORT/up" || die "API did not come back after the refresh"
+  # Migrate before polling /up: a pending migration makes /up answer 500 until it runs.
   in_dir docker compose exec -T web bundle exec rails db:migrate
+  # Puma and sidekiq here do not reload synced Ruby code, which can also arrive as uncommitted files.
+  in_dir docker compose restart web sidekiq
+  wait_http "http://127.0.0.1:$API_PORT/up" || die "API did not come back after the refresh"
   wait_http "http://127.0.0.1:$SPA_PORT/" || die "SPA did not come back after the refresh"
 }
 
@@ -242,11 +244,11 @@ cmd_sync() {
   git -C "$DIR" checkout -q --detach "$head"
   git -C "$src" diff --binary HEAD | git -C "$DIR" apply --whitespace=nowarn --allow-empty
   git -C "$src" ls-files -z --others --exclude-standard -- . \
-    ':!.jira-plans' ':!.claude' ':!.mcp.json' ':!flags.json' ':!.codex' ':!.cursor' ':!.agents' ':!AGENTS.md' \
+    ':!.ai-workspace' ':!.claude' ':!.mcp.json' ':!flags.json' ':!.codex' ':!.cursor' ':!.agents' ':!AGENTS.md' \
     | rsync -a --from0 --files-from=- "$src/" "$DIR/"
   printf 'source: %s\nbranch: %s\nsha: %s\ndirty: %s\nat: %s\n' "$src" \
     "$(git -C "$src" branch --show-current)" "$head" \
-    "$([ -n "$(git -C "$src" status --porcelain -- . ':!.jira-plans' ':!.claude')" ] && echo yes || echo no)" \
+    "$([ -n "$(git -C "$src" status --porcelain -- . ':!.ai-workspace' ':!.claude')" ] && echo yes || echo no)" \
     "$(date -u +%FT%TZ)" >"$STATE"
   refresh "$before"
   echo "stack $N: synced $src ($(git -C "$src" branch --show-current) $(git -C "$src" rev-parse --short HEAD)), $URL"

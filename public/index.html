@@ -3,35 +3,35 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Skills Dashboard</title>
+<title>Skills dashboard</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Carlito:wght@400;700&display=swap">
 <link rel="stylesheet" href="/styles.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 </head>
 <body>
 <header class="top">
-  <div class="brand">Skills dashboard <span id="repo" class="muted"></span></div>
-  <nav class="nav"><a href="/" class="on">Board</a><a href="/history">History <span id="history-count" class="muted"></span></a><a href="/reviews">Reviews</a></nav>
+  <div class="brand"><img src="/favicon.svg" alt=""><b>Skills dashboard</b><span id="repo" class="repo"></span></div>
+  <nav class="nav"><a href="/" class="on">Board</a><a href="/history">History<span id="history-count"></span></a><a href="/reviews">PRs</a></nav>
   <div class="status-row" id="status-row"></div>
   <div class="actions">
-    <label class="muted small">sprint <select id="sprint-filter"><option value="mine">mine</option><option value="all">everyone</option></select></label>
-    <label class="muted small"><input type="checkbox" id="show-done" checked> show merged</label>
+    <label>Sprint <select id="sprint-filter"><option value="mine">Mine</option><option value="all">All</option></select></label>
+    <label><input type="checkbox" id="show-done" checked>Merged</label>
     <button id="refresh" title="Drop PR and JIRA caches and refetch">Refresh</button>
   </div>
 </header>
 
-<section id="questions" class="questions hidden"></section>
-
 <main>
-  <section id="tickets" class="tickets"></section>
-  <aside id="detail" class="detail hidden"></aside>
+  <section id="questions" class="questions hidden"></section>
+  <section id="tickets"></section>
+  <section class="panel"><div class="grp-head"><span class="eyebrow">Worktrees and headless agents</span></div><div id="worktrees"></div></section>
+  <section class="panel"><div class="grp-head"><span class="eyebrow">Launched from this page <span id="launches-count"></span></span></div><div id="launches"></div></section>
+  <section class="panel"><div class="grp-head"><span class="eyebrow">Pipeline runs <span id="runs-count"></span></span></div><div id="runs"></div></section>
+  <details class="panel"><summary class="grp-head"><span class="eyebrow">PR reviews drafted by the skills <span id="reviews-count"></span></span></summary><div id="reviews"></div></details>
 </main>
 
-<section class="bottom">
-  <details open><summary>Skills launched from this page <span id="launches-count" class="muted"></span></summary><div id="launches"></div></details>
-  <details open><summary>Pipeline runs <span id="runs-count" class="muted"></span></summary><div id="runs"></div></details>
-  <details><summary>PR reviews drafted by the skills <span id="reviews-count" class="muted"></span></summary><div id="reviews"></div></details>
-  <details><summary>Worktrees and headless agents</summary><div id="worktrees"></div></details>
-</section>
+<div id="scrim" class="scrim hidden" data-close></div>
+<aside id="detail" class="drawer hidden"></aside>
 
 <script src="/common.js"></script>
 <script src="/app.js"></script>

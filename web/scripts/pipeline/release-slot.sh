@@ -7,7 +7,7 @@
 #
 # Usage: ./release-slot.sh <repo-root> <ticket-id>
 #
-# Reads .claude/pipeline-slots/.owner-<TICKET-ID> to find which slot number is
+# Reads .ai-workspace/pipeline-slots/.owner-<TICKET-ID> to find which slot number is
 # currently held, removes that slot directory, then removes the owner file.
 # The owner file (not a variable held in memory) is the single source of
 # truth for "which slot does this ticket currently hold" — it's what lets the
@@ -24,7 +24,7 @@ fi
 
 REPO_ROOT="$1"
 TICKET_ID="$2"
-OWNER_FILE="$REPO_ROOT/.claude/pipeline-slots/.owner-$TICKET_ID"
+OWNER_FILE="$REPO_ROOT/.ai-workspace/pipeline-slots/.owner-$TICKET_ID"
 
 if [ ! -f "$OWNER_FILE" ]; then
   echo "No owner file for $TICKET_ID — nothing to release" >&2
@@ -32,6 +32,6 @@ if [ ! -f "$OWNER_FILE" ]; then
 fi
 
 SLOT=$(cat "$OWNER_FILE")
-rm -rf "$REPO_ROOT/.claude/pipeline-slots/$SLOT"
+rm -rf "$REPO_ROOT/.ai-workspace/pipeline-slots/$SLOT"
 rm -f "$OWNER_FILE"
 echo "Released slot $SLOT for $TICKET_ID"

@@ -1,7 +1,7 @@
 ---
 name: w-4-publish
 description: Rebase a locally-prepared branch onto origin/main, push, and open or update its PR with the ticket's change notes. Commits first when /w-3-land-branch left the pipeline commit un-committed for review. `draft` opens a draft PR straight from pipeline output; otherwise an existing draft is marked ready. Use to publish a branch from /w-1-coding or /w-3-land-branch.
-argument-hint: "[branch-name-or-XWWP-XXXX] [draft]"
+argument-hint: "[branch-name-or-TICKET-ID] [draft]"
 model: sonnet
 effort: high
 ---
@@ -16,7 +16,7 @@ Host-specific mechanics (arguments, invoking other skills, delegation, asking th
 `.claude/skills/_shared/host-runtime.md`.
 
 Arguments: `$ARGUMENTS` — optional. A branch name, a partial branch name, or a ticket id
-(e.g. `XWWP-1551`), plus optionally the word `draft`.
+(a ticket id matching `ticket_pattern`, `host-runtime.md`), plus optionally the word `draft`.
 
 - **`draft`** → open the PR as a **draft**, skip every human gate, keep the ticket's local state.
   This is what `scripts/pipeline/run-ticket-pipeline.sh --draft-pr` runs inside the worktree at
@@ -40,7 +40,7 @@ qualifying statuses are `ready-for-push`, any status whose frontmatter carries
 `pipeline_commit:`, and a `ready-for-review` / `draft-pr-open` branch that is currently checked
 out in the main checkout (with `draft`: every `ready-for-review` and `draft-pr-open`).
 
-Then check `.jira-plans/<TICKET-ID>/local-branch.md`'s `status:`, if the file exists:
+Then check `.ai-workspace/jira-plans/<TICKET-ID>/local-branch.md`'s `status:`, if the file exists:
 
 - `ready-for-push` or missing file → continue.
 - `draft-pr-open` or `ready-for-review` with `pipeline_commit:` in the frontmatter → the
@@ -92,7 +92,7 @@ checkout) — if it somehow shows up there, abort and report.
   modify files, stage them and `git commit --amend --no-edit`.
 - If the new tip differs from `<pipeline_commit>` (`git diff --stat <pipeline_commit> HEAD` is
   not empty), append a short `## Post-review edits` section to
-  `.jira-plans/<TICKET-ID>/change-notes.md` — one to three bullets on what the developer changed
+  `.ai-workspace/jira-plans/<TICKET-ID>/change-notes.md` — one to three bullets on what the developer changed
   versus the pipeline's version. Step 7 carries it into the PR body.
 - Update `local-branch.md`: `status: ready-for-push`, drop `pipeline_commit:`, keep `pr_url:` if
   present. From here the branch is an ordinary `ready-for-push` one.
@@ -144,7 +144,7 @@ touched what the change imports, calls or is specced by. Then:
 
 - Check for an existing PR on this branch: `gh pr view <branch-name> --json url,number,isDraft,body`.
   If it errors, there's no PR yet.
-- **Build the body** from `.jira-plans/<TICKET-ID>/local-branch.md` (fall back to re-deriving
+- **Build the body** from `.ai-workspace/jira-plans/<TICKET-ID>/local-branch.md` (fall back to re-deriving
   from the diff/ticket if the file is missing or incomplete), using the template at
   `.github/pull_request_template.md`, as plain text with the `> <Insert here …>` placeholder
   markers dropped:
@@ -156,7 +156,7 @@ touched what the change imports, calls or is specced by. Then:
   - **Testing Instructions**: the file's `## Testing Instructions` section.
   - **Change Notes** — always the **last** section, draft and final PR alike: a
     `## :memo: Change Notes` header followed by the body of
-    `.jira-plans/<TICKET-ID>/change-notes.md` verbatim (everything after its frontmatter,
+    `.ai-workspace/jira-plans/<TICKET-ID>/change-notes.md` verbatim (everything after its frontmatter,
     including any `## Post-review edits`, with its `##` headers demoted to `###`). Omit the
     section only if the file doesn't exist.
 - **No existing PR** →
@@ -175,7 +175,7 @@ touched what the change imports, calls or is specced by. Then:
 
 ## 7b. Attach the QA screenshots
 
-When `.jira-plans/<TICKET-ID>/screenshots/index.md` exists (written by a passing qa-check with
+When `.ai-workspace/jira-plans/<TICKET-ID>/screenshots/index.md` exists (written by a passing qa-check with
 a browser pass), `draft` was **not** passed, and this is an interactive Claude Code session:
 invoke `/w-7-attach-pr-visuals <TICKET-ID>`, which uploads those files into the PR's
 Screenshots/Recordings section. Otherwise skip, and with `draft`, unattended or another host
@@ -184,7 +184,7 @@ attach does not undo the publish; report it.
 
 ## 8. Update local-branch state
 
-Update `.jira-plans/<TICKET-ID>/local-branch.md` (create it if this ticket somehow has no such
+Update `.ai-workspace/jira-plans/<TICKET-ID>/local-branch.md` (create it if this ticket somehow has no such
 file yet) and add/refresh a `pr_url:` field with the PR URL:
 
 - `draft` passed → `status: draft-pr-open`. The ticket's local state stays in place: the human
@@ -198,19 +198,19 @@ Skip this step entirely when `draft` was passed. Otherwise, once the PR is open 
 and `local-branch.md` is updated, this ticket's local pipeline state is no longer needed. Only run
 this step if step 7 succeeded — leave everything in place on failure so the run can be retried.
 
-- If `.claude/worktrees/<TICKET-ID>` still exists and is clean per the "Is a pipeline worktree
+- If `.ai-workspace/worktrees/<TICKET-ID>` still exists and is clean per the "Is a pipeline worktree
   clean?" check in `.claude/skills/_shared/run-checks.md`: `git worktree remove --force` it
   (the copied-in scaffolding is untracked, so a plain remove refuses), then `git worktree
   prune`. Dirty → leave it and say so.
-- `rm -rf .jira-plans/<TICKET-ID>/`, except when step 7b was skipped or failed while
+- `rm -rf .ai-workspace/jira-plans/<TICKET-ID>/`, except when step 7b was skipped or failed while
   `screenshots/` exists: then delete everything in the folder but `screenshots/`, and name it
   in the report.
 - Remove this ticket's files from every pipeline-logs run:
-  `rm -f .claude/pipeline-logs/*/<TICKET-ID>.log .claude/pipeline-logs/*/<TICKET-ID>.status`.
+  `rm -f .ai-workspace/pipeline-logs/*/<TICKET-ID>.log .ai-workspace/pipeline-logs/*/<TICKET-ID>.status`.
 - Prune any pipeline-logs run directory that now holds nothing but its `progress.log`:
 
   ```bash
-  for d in .claude/pipeline-logs/*/; do
+  for d in .ai-workspace/pipeline-logs/*/; do
     [ -z "$(ls -A "$d" | grep -v '^progress\.log$')" ] && rm -rf "$d"
   done
   ```

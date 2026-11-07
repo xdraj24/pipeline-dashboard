@@ -1,7 +1,7 @@
 ---
 name: w-5-resolve-pr-comments
-description: Fetch a PR's unresolved review threads (by XWWP ticket or PR link/number), fix each in code, push, then reply and resolve the threads on GitHub. Use to address reviewer feedback on an open PR.
-argument-hint: "<XWWP-XXXX|PR-link-or-number>"
+description: Fetch a PR's unresolved review threads (by Jira ticket or PR link/number), fix each in code, push, then reply and resolve the threads on GitHub. Use to address reviewer feedback on an open PR.
+argument-hint: "<TICKET-ID|PR-link-or-number>"
 model: opus
 effort: high
 ---
@@ -16,7 +16,7 @@ Host-specific mechanics (arguments, invoking other skills, delegation, asking th
 `.claude/skills/_shared/host-runtime.md`.
 
 Argument: `$ARGUMENTS` — required, one of:
-- An XWWP ticket id (e.g. `XWWP-1551`) — the PR is looked up from local state / GitHub.
+- A ticket id matching `ticket_pattern` (`host-runtime.md`) — the PR is looked up from local state / GitHub.
 - A GitHub PR URL (e.g. `https://github.com/<org>/<repo>/pull/123`).
 - A bare PR number (e.g. `123`) — resolved against this repo's `origin`.
 

@@ -4,13 +4,13 @@ Input from `SKILL.md`: a single ticket id.
 
 ## This phase is re-entrant
 
-Load state first: read `.jira-plans/<TICKET-ID>/plan.md`, including its `## To-do` list and any
+Load state first: read `.ai-workspace/jira-plans/<TICKET-ID>/plan.md`, including its `## To-do` list and any
 `## Implementation Log`. That to-do list is the state. On a return visit, don't re-ask anything
 already recorded in `plan.md`: pick up from the first unchecked to-do item.
 
 ## 1. Load the plan
 
-- Read `.jira-plans/<TICKET-ID>/plan.md`.
+- Read `.ai-workspace/jira-plans/<TICKET-ID>/plan.md`.
 - If it doesn't exist, **stop** and tell the developer to run `/w-1-coding <TICKET-ID> just-plan`
   first. Do not improvise a plan yourself.
 - If it exists but has no `## To-do` section (a plan written before that section existed), derive
@@ -42,6 +42,9 @@ already recorded in `plan.md`: pick up from the first unchecked to-do item.
   moment its work is done, not in a batch at the end: a session that dies or gets cleared resumes
   from the first unchecked box, so a stale tick costs lost work and a stale untick costs rework.
 - If the ticket needs work no to-do item covers, add the item to the list before doing it.
+- A to-do item that can only be done in the running app (a visual or manual check) is not yours
+  to leave unchecked: move it to `## Manual checks` (create the section if missing) as a plain
+  bullet. qa-check's browser pass covers it, and an unchecked box would mark implement unfinished.
 - Follow this repo's conventions (root, `frontend/`, and `backend/app/` `CLAUDE.md` files) — component
   structure, styling, no barrel files, etc.
 - Add/update the tests listed under the plan's **Tests** section. Every code change needs a
@@ -55,7 +58,7 @@ already recorded in `plan.md`: pick up from the first unchecked to-do item.
 
 Reviewers in this repo consistently push back on comment volume. Code is expected to explain
 itself through naming and structure; a comment is the exception, not the default. The explanation
-a reviewer needs goes into `.jira-plans/<TICKET-ID>/change-notes.md` in the commit phase and from
+a reviewer needs goes into `.ai-workspace/jira-plans/<TICKET-ID>/change-notes.md` in the commit phase and from
 there into the PR body — not into the source.
 
 - **Never** write a comment that narrates what the code does, restates a name, explains the
@@ -87,7 +90,7 @@ isn't resolvable within a few attempts, stop and report it rather than working a
 
 ## 6. Record what happened
 
-Append an `## Implementation Log` section to `.jira-plans/<TICKET-ID>/plan.md` (don't remove the
+Append an `## Implementation Log` section to `.ai-workspace/jira-plans/<TICKET-ID>/plan.md` (don't remove the
 existing content): a few bullets on what was actually done, any deviation from the original plan,
 and every assumption you made where the ticket or the plan left room for interpretation. This is
 context for the code-review phase, and the raw material for `change-notes.md` in the commit

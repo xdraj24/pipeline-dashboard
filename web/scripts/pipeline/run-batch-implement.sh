@@ -17,14 +17,14 @@
 # --stages defaults to implement,code-review,commit,qa-check; any subset of
 # run-ticket-pipeline.sh's stages is accepted and passed through.
 #
-# Every ticket must already have a plan at `.jira-plans/<TICKET-ID>/plan.md` in
+# Every ticket must already have a plan at `.ai-workspace/jira-plans/<TICKET-ID>/plan.md` in
 # the main checkout (/w-1-coding plans before launching this) — this script
 # refuses to start otherwise, since implementation without a plan is exactly
 # what the implement phase rejects.
 #
 # Concurrency defaults to MAX_SLOTS (lib.sh); more than that just fails to
 # claim a slot. Per-ticket output is tee'd to
-# `.claude/pipeline-logs/<run-id>/<TICKET-ID>.log`.
+# `.ai-workspace/pipeline-logs/<run-id>/<TICKET-ID>.log`.
 #
 # This is what /w-1-coding's background and draft-pr modes launch.
 #
@@ -145,7 +145,7 @@ REPO_ROOT="$(resolve_repo_root)"
 # a half-launched batch is much harder to reason about than a refused one.
 MISSING=""
 for ticket in $TICKETS; do
-  if [ ! -f "$REPO_ROOT/.jira-plans/$ticket/plan.md" ]; then
+  if [ ! -f "$REPO_ROOT/.ai-workspace/jira-plans/$ticket/plan.md" ]; then
     MISSING="$MISSING $ticket"
   fi
 done
@@ -156,7 +156,7 @@ if [ -n "$MISSING" ]; then
 fi
 
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-LOG_DIR="$REPO_ROOT/.claude/pipeline-logs/$RUN_ID"
+LOG_DIR="$REPO_ROOT/.ai-workspace/pipeline-logs/$RUN_ID"
 mkdir -p "$LOG_DIR"
 
 # Shared across every concurrent ticket subshell below: each one appends its
@@ -245,7 +245,7 @@ for ticket in $TICKETS; do
   echo "  $status $ticket  ($LOG_DIR/$ticket.log)"
 done
 echo ""
-echo "Worktrees:  $REPO_ROOT/.claude/worktrees/<TICKET-ID>"
+echo "Worktrees:  $REPO_ROOT/.ai-workspace/worktrees/<TICKET-ID>"
 echo "Progress:   $PROGRESS_LOG"
 if [ "$DRAFT_PR" -eq 1 ]; then
   echo "Each successful ticket is committed locally on its branch and pushed as a"

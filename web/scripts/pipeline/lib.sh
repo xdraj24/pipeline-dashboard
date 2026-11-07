@@ -44,7 +44,7 @@ run_agent_headless() {
   local workdir="$1" prompt="$2"
   case "$PIPELINE_AGENT" in
     claude)
-      local args=(--permission-mode dontAsk --allowedTools "mcp__atlassian__*,mcp__slack__*")
+      local args=(--permission-mode dontAsk --allowedTools "Bash,Edit,Write,Read,Glob,Grep,Agent,Skill,ToolSearch,mcp__atlassian__*,mcp__slack__*")
       if [ -n "${PIPELINE_MAX_TURNS:-}" ]; then
         args+=(--max-turns "$PIPELINE_MAX_TURNS")
       fi

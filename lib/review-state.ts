@@ -7,8 +7,8 @@ import { jiraConfig, jiraIssueDetail, type JiraConfig, type JiraIssueDetail } fr
 import { REPO_ROOT, TICKET_RE, parseFrontmatter, readText, type Cached } from './util.ts';
 import path from 'node:path';
 import { parseReviewTable, snippet, type ReviewRow, type Snippet } from './review-file.ts';
+import { nextStep, type ReviewNext } from './review-next.ts';
 
-export type ReviewNext = { command: string | null; label: string; reason: string };
 export type ReviewCard = ReviewPr & { bucket: 'queue' | 'mine' | 'others' | 'approved'; draft: PrReviewFile | null; launches: Launch[]; sessions: SkillSession[]; next: ReviewNext };
 export type ReviewState = {
   generatedAt: string; repo: Cached<string>; viewer: Cached<string>; gh: Cached<{ ok: boolean; detail: string }>;
@@ -17,21 +17,6 @@ export type ReviewState = {
   queue: ReviewCard[]; mine: ReviewCard[]; others: ReviewCard[]; sessions: SkillSession[];
   approved: { loading: boolean; error: string | null; fetchedAt: string | null; prs: (ApprovedPr & { draft: PrReviewFile | null })[] };
 };
-
-function nextStep(pr: ReviewPr, draft: PrReviewFile | null): ReviewNext {
-  const n = pr.number;
-  if (draft?.status === 'published') return { command: null, label: 'published', reason: `review published from .pr-reviews/PR-${n} · waiting for the author` };
-  if (draft?.status === 'verified') {
-    if (draft.publishCount === 0) return { command: null, label: 'tick comments', reason: `verified draft with ${draft.commentCount} comment(s), none ticked for publishing yet` };
-    return { command: `/w-23-publish-review ${n}`, label: 'publish', reason: draft.publishCount === null ? `verified draft with ${draft.commentCount} comment(s) ready to post (tick rows in the detail to post a subset)` : `${draft.publishCount} of ${draft.commentCount} ticked comment(s) ready to post` };
-  }
-  if (draft?.status === 'draft') return { command: `/w-22-verify-review-comments ${n}`, label: 'verify', reason: `draft with ${draft.commentCount} comment(s) from ${draft.frontmatter.review_model ?? 'unknown'} awaits a second model` };
-  if (pr.mine !== 'none') {
-    if (pr.pushedSinceMine) return { command: `/w-21-review-prs ${n}`, label: 're-review', reason: `new commits since your last review${pr.commentsSinceMine ? ` · ${pr.commentsSinceMine} new comment(s)` : ''}` };
-    return { command: null, label: 'waiting', reason: pr.commentsSinceMine ? `${pr.commentsSinceMine} new comment(s) since your review, no new commits` : 'waiting for the author' };
-  }
-  return { command: `/w-21-review-prs ${n}`, label: 'review', reason: pr.others === 'none' ? 'no human has reviewed this yet' : `reviewed by ${pr.otherHumans.join(', ')}, not by you` };
-}
 
 export async function buildReviewState(): Promise<ReviewState> {
   const [files, launches, allSessions] = await Promise.all([readPrReviews(), listLaunches(), readSkillSessions()]);
@@ -85,7 +70,7 @@ export async function buildReviewDetail(pr: number): Promise<ReviewDetail> {
   const state = await buildReviewState();
   const card = [...state.queue, ...state.mine, ...state.others].find((c) => c.number === pr) ?? null;
   const approved = state.approved.prs.find((p) => p.number === pr) ?? null;
-  const rel = `.pr-reviews/PR-${pr}/review.md`;
+  const rel = `.ai-workspace/pr-reviews/PR-${pr}/review.md`;
   const text = await readText(path.join(REPO_ROOT, rel));
   const fm = text === null ? {} : parseFrontmatter(text).data;
   const fromFile = (fm.jira_ticket ?? fm.branch ?? '').match(TICKET_RE)?.[0] ?? null;

@@ -5,10 +5,10 @@ The w-* AI dev workflow for the Welligence web repo, kept outside it:
 | Path | What |
 |---|---|
 | `server.ts`, `lib/`, `public/`, `bin/` | the skills dashboard (below) |
-| `web/` | files symlinked into the web checkout: `.claude/skills`, `.agents`, `.codex`, `.mcp.json`, `scripts/pipeline`, `docs/second-dev-stack.md` |
+| `web/` | files symlinked into the web checkout: each folder under `.claude/skills/` (one link per skill, so skills committed to web itself stay alongside), `.codex`, `.mcp.json`, `scripts/pipeline`, `docs/second-dev-stack.md` |
 | `CLAUDE.md`, `AGENTS.md` | repo-agnostic conventions; `/w-setup` copies them into a repo that lacks them or adds the missing rules to the existing files (`/w-setup instructions <repo>` for any repo) |
-| `bin/link-web.sh [web-dir]` | creates those symlinks and lists them, plus the skills' local state (`.jira-plans/`, `.pr-reviews/`, `.claude/pipeline-*`, `.claude/worktrees/`), in the web clone's `.git/info/exclude` |
-| `w-setup/` | the `/w-setup` personal skill that sets all of this up on a new machine |
+| `bin/link-web.sh [web-dir]` | creates those symlinks and lists them, plus the skills' local state (`.ai-workspace/`: `jira-plans/`, `pr-reviews/`, `pipeline-logs/`, `pipeline-slots/`, `worktrees/`), in the web clone's `.git/info/exclude` |
+| `web/.claude/skills/w-setup/` | the `/w-setup` project skill that sets all of this up on a new machine |
 
 Skills are edited in place through the symlinks and committed here. The web remote never sees
 them.
@@ -16,12 +16,12 @@ them.
 ## New machine
 
 ```
-mkdir -p ~/.claude/skills/w-setup
-gh api repos/xdraj24/pipeline-dashboard/contents/w-setup/SKILL.md -H 'Accept: application/vnd.github.raw' > ~/.claude/skills/w-setup/SKILL.md
+gh repo clone xdraj24/pipeline-dashboard <web-parent>/pipeline-dashboard   # next to the web checkout
+<web-parent>/pipeline-dashboard/bin/link-web.sh <web-parent>/web
 ```
 
-Then run `/w-setup` in Claude Code. It clones this repo next to the web checkout, installs what
-is missing, links the skills, starts the dashboard, and optionally sets up Slack escalation, the
+Then start Claude Code in the web checkout and run `/w-setup`. It installs what is missing, re-links
+the skills, starts the dashboard, and optionally sets up Slack escalation, the
 second web stack (PR review, `/w-24-land-branch-for-review`) and the third (QA).
 
 # Skills dashboard
@@ -46,17 +46,17 @@ Node 22.18+ (type stripping, no dependencies). `PORT=5000 node server.ts` change
 
 | Source | Used for |
 |---|---|
-| `.jira-plans/<T>/plan.md` | title, to-do progress, risks / open questions, implementation log |
-| `.jira-plans/<T>/code-review.md` | rounds, final STATUS, reviewer/fixer models, unresolved findings |
-| `.jira-plans/<T>/qa-check.md` | rounds, final QA verdict, browser driver, whether QA changed code, qa model, open findings |
-| `.jira-plans/<T>/change-notes.md` | what changed, decisions, assumptions |
-| `.jira-plans/<T>/local-branch.md` | status, branch, pr_url, release / cherry-pick PRs |
-| `.claude/pipeline-logs/<run>/` | stage timeline (`progress.log`, one chip per stage pass: its `in progress` line is folded into the `done`/`FAILED` line that follows), per-ticket log tail, exit codes |
-| `.claude/pipeline-slots/`, `ps` | which tickets are running right now and in which phase |
+| `.ai-workspace/jira-plans/<T>/plan.md` | title, to-do progress, risks / open questions, implementation log |
+| `.ai-workspace/jira-plans/<T>/code-review.md` | rounds, final STATUS, reviewer/fixer models, unresolved findings |
+| `.ai-workspace/jira-plans/<T>/qa-check.md` | rounds, final QA verdict, browser driver, whether QA changed code, qa model, open findings |
+| `.ai-workspace/jira-plans/<T>/change-notes.md` | what changed, decisions, assumptions |
+| `.ai-workspace/jira-plans/<T>/local-branch.md` | status, branch, pr_url, release / cherry-pick PRs |
+| `.ai-workspace/pipeline-logs/<run>/` | stage timeline (`progress.log`, one chip per stage pass: its `in progress` line is folded into the `done`/`FAILED` line that follows), per-ticket log tail, exit codes |
+| `.ai-workspace/pipeline-slots/`, `ps` | which tickets are running right now and in which phase |
 | `git worktree list`, `refs/heads/*XWWP-*` | worktrees, dirty files, local branches |
 | `gh api graphql` | PR state, draft, approvals, unresolved threads, comments since last push, CI |
 | JIRA REST (`JIRA_EMAIL` + `JIRA_API_TOKEN` in this repo's `.env`) | ticket status, type, assignee, sprint |
-| `.pr-reviews/` | reviews drafted by `/w-21`, verified by `/w-22`, published by `/w-23` |
+| `.ai-workspace/pr-reviews/` | reviews drafted and verified by `/w-21`, published by `/w-23` |
 
 Models shown per ticket come from what `code-review.md` and `qa-check.md` recorded; "unknown"
 means the skill did not write it down. Nothing is inferred.
@@ -84,7 +84,7 @@ invocation is accepted; one running launch per ticket.
 its PR is merged (for a fast-tracked hotfix: the release PR and the cherry-pick PR) and its JIRA
 status is one of `ARCHIVE_JIRA_STATUSES` in `lib/archive.ts` ("QC'd on STG",
 "Delivered IN APP.WELLIGENCE"). Archiving writes `archived: <ISO time>` and `archived_reason:`
-into the frontmatter of `.jira-plans/<TICKET>/plan.md` (mtime preserved). A ticket with no plan
+into the frontmatter of `.ai-workspace/jira-plans/<TICKET>/plan.md` (mtime preserved). A ticket with no plan
 folder gets the marker in `data/archive/<TICKET>.md` instead. Delete the two lines (or the side
 file) to put a ticket back on the board.
 
@@ -106,7 +106,7 @@ Filters at the top: `small` (≤ 200 changed lines and ≤ 10 files, `SMALL_MAX_
 `/w-20-list-prs-for-review`, computed from the first 100 changed files), and `hide bot authors`.
 They are kept in the browser. Every card suggests the next skill for that PR, with the same copy /
 ▶ run / terminal buttons as the board: `/w-21-review-prs <n>` when nothing is drafted,
-`/w-22-verify-review-comments <n>` for a `status: draft` file under `.pr-reviews/PR-<n>/`,
+`/w-21-review-prs just-verify <n>` for a `status: draft` file under `.ai-workspace/pr-reviews/PR-<n>/`,
 `/w-23-publish-review <n>` once verified. The filter bar also offers one `/w-21-review-prs`
 over every PR currently shown in the first group. Headless launches from this page are keyed by
 PR number (`pr` in `data/launches/<id>.json`) and show in the board's launches section too.
@@ -129,7 +129,7 @@ surrounding code (±5 lines from the GitHub contents API at the head branch, `sn
 `lib/review-file.ts`, cached 2 min, the commented line highlighted) and the comment body. Ticking a
 box (`POST /api/reviews/<n>/publish-flags`) rewrites the table in `review.md` with a third
 `Publish` column holding `[x]` / `[ ]`; `/w-23-publish-review` posts only the `[x]` rows when that
-column exists, and the card's next step says "k of n ticked". `/w-22` drops the column when it
+column exists, and the card's next step says "k of n ticked". `/w-21` drops the column when it
 rewrites the table. `preview` on a card opens the panel straight on that tab. The
 ticket comes from the PR, or from the review file's `jira_ticket` / `branch` frontmatter while the
 PR list is still loading. Without JIRA credentials the tab shows "JIRA off" and the PR facts only.

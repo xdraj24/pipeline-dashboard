@@ -1,13 +1,13 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { DATA_DIR, REPO_ROOT, listDir, normalizeTicket, parseFrontmatter, readText, TICKET_RE } from './util.ts';
+import { DATA_DIR, REPO_ROOT, WORKSPACE_DIR, listDir, normalizeTicket, parseFrontmatter, readText, TICKET_RE } from './util.ts';
 
 export const ARCHIVE_JIRA_STATUSES = ["QC'd on STG", 'Delivered IN APP.WELLIGENCE'];
 export const ARCHIVE_DIR = path.join(DATA_DIR, 'archive');
 
 export type Archived = { at: string; reason: string; file: string };
 
-function planFile(ticket: string): string { return path.join(REPO_ROOT, '.jira-plans', ticket, 'plan.md'); }
+function planFile(ticket: string): string { return path.join(WORKSPACE_DIR, 'jira-plans', ticket, 'plan.md'); }
 function sideFile(ticket: string): string { return path.join(ARCHIVE_DIR, `${ticket}.md`); }
 
 function fromFrontmatter(file: string, data: Record<string, string>): Archived | null {
@@ -58,6 +58,6 @@ export async function archiveTicket(ticket: string, reason: string): Promise<Arc
     return { at, reason, file: path.relative(REPO_ROOT, plan) };
   }
   const side = sideFile(ticket);
-  await writeAtomic(side, upsertFrontmatter(`# ${ticket}\n\nArchived by the dashboard. This ticket has no .jira-plans folder, so the marker lives here.\n`, { ticket, ...kv }));
+  await writeAtomic(side, upsertFrontmatter(`# ${ticket}\n\nArchived by the dashboard. This ticket has no .ai-workspace/jira-plans folder, so the marker lives here.\n`, { ticket, ...kv }));
   return { at, reason, file: path.relative(REPO_ROOT, side) };
 }

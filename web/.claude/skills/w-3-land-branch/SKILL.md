@@ -1,7 +1,7 @@
 ---
 name: w-3-land-branch
 description: Land a branch produced by the unattended pipeline into the main working directory for a human pass. Rebases it onto fresh origin/main, re-runs code review and QA when the rebase touched the change, surfaces change notes and unresolved findings, keeps the pipeline commit (un-commits with reset-commit), re-commits on approval. Use after a background /w-1-coding or /w-10-sprint-batch run.
-argument-hint: "XWWP-XXXX [reset-commit]"
+argument-hint: "<TICKET-ID> [reset-commit]"
 model: sonnet
 effort: medium
 ---
@@ -10,7 +10,7 @@ effort: medium
 
 A sibling of `/w-4-publish` and `/w-4-1-fast-track-push-to-release` — same family, different job.
 Those publish a branch that's already `ready-for-push`. This one takes a branch that an
-**unattended pipeline run** produced (`status: ready-for-review`, or `draft-pr-open` when the run
+**pipeline run** produced, background or supervised (`status: ready-for-review`, or `draft-pr-open` when the run
 ended with a draft PR) and hands it to a human for review in the main working directory before it
 can become `ready-for-push`. Along the way it rebases the branch onto
 fresh `origin/main` and decides whether main moved enough under the change to warrant another
@@ -21,7 +21,7 @@ developer goes straight from reviewing to publishing.
 Host-specific mechanics (arguments, invoking other skills, delegation, asking the developer):
 `.claude/skills/_shared/host-runtime.md`.
 
-Arguments: `$ARGUMENTS` — a single XWWP ticket id (e.g. `XWWP-1551`), required, plus optionally
+Arguments: `$ARGUMENTS` — a single ticket id matching `ticket_pattern` (`host-runtime.md`), required, plus optionally
 `reset-commit`. If the ticket id is missing, ask the developer for it before doing anything else.
 
 Every question for the developer in this skill goes through
@@ -29,18 +29,18 @@ Every question for the developer in this skill goes through
 
 ## 1. Check the ticket's status
 
-- Read `.jira-plans/<TICKET-ID>/local-branch.md`. If it doesn't exist, stop and tell the user
+- Read `.ai-workspace/jira-plans/<TICKET-ID>/local-branch.md`. If it doesn't exist, stop and tell the user
   there's nothing to land for this ticket (it may not have run through the pipeline at all).
 - Check its `status:` field:
   - `ready-for-review` → pipeline output, no PR yet. Continue.
   - `draft-pr-open` → pipeline output, draft PR already pushed (`pr_url:` holds it). Continue.
   - `ready-for-push` (or anything else, e.g. `pushed`, `fast-tracked-to-release`) → stop and tell
-    the user this ticket did **not** go through the unattended pipeline (or was already landed)
+    the user this ticket did **not** go through the pipeline (or was already landed)
     — this skill is only for pipeline output, not a general-purpose branch review tool.
 
 ## 2. Find the worktree, or detect a stalled landing
 
-`git worktree list --porcelain`, looking for `worktree <repo-root>/.claude/worktrees/<TICKET-ID>`.
+`git worktree list --porcelain`, looking for `worktree <repo-root>/.ai-workspace/worktrees/<TICKET-ID>`.
 
 - **Found** → the worktree must be clean per the "Is a pipeline worktree clean?" check in
   `.claude/skills/_shared/run-checks.md` (a bare `git status` always shows the copied-in
@@ -59,19 +59,19 @@ Every question for the developer in this skill goes through
   - Otherwise, if `git rev-parse --verify --quiet refs/heads/<branch>` succeeds → skip step 3
     and continue at step 4. Branch gone too → ask how to proceed.
 
-## 3. Sync `.jira-plans/` and remove the worktree
+## 3. Sync `.ai-workspace/jira-plans/` and remove the worktree
 
-- The worktree's `.jira-plans/<TICKET-ID>/` is the freshest copy (the coordinator script copies it
+- The worktree's `.ai-workspace/jira-plans/<TICKET-ID>/` is the freshest copy (the coordinator script copies it
   back after each stage, but this is the last chance to catch anything newer). Diff it against the
   main checkout's copy; if they differ, copy the worktree's version over:
-  `cp -r .claude/worktrees/<TICKET-ID>/.jira-plans/<TICKET-ID> .jira-plans/`.
-- `git worktree remove --force .claude/worktrees/<TICKET-ID>` (`--force` only because the
+  `cp -r .ai-workspace/worktrees/<TICKET-ID>/.ai-workspace/jira-plans/<TICKET-ID> .ai-workspace/jira-plans/`.
+- `git worktree remove --force .ai-workspace/worktrees/<TICKET-ID>` (`--force` only because the
   copied-in scaffolding is untracked; step 2 already proved there is no real work in it).
 - `git worktree prune`.
 
 ## 4. Check out the branch in the main working directory
 
-- Read `branch:` from `.jira-plans/<TICKET-ID>/local-branch.md`.
+- Read `branch:` from `.ai-workspace/jira-plans/<TICKET-ID>/local-branch.md`.
 - `git status` on the **current** branch first — if there are uncommitted changes unrelated to
   this ticket, warn the user and confirm before switching (same guard as
   `.claude/skills/_shared/find-branch.md`).
@@ -142,7 +142,7 @@ Say which of the two you did.
 
 Before the user looks at the diff, show verbatim, up front, in this order:
 
-- `.jira-plans/<TICKET-ID>/change-notes.md` — the whole file (what changed, decisions,
+- `.ai-workspace/jira-plans/<TICKET-ID>/change-notes.md` — the whole file (what changed, decisions,
   assumptions). This is the main thing to read before the diff. If it's missing (a run from before
   it existed), say so.
 - Step 5's outcome: conflicts resolved (file and one line on how each was settled) or none, and
@@ -179,6 +179,14 @@ edited message") — do not accept a bare "looks good" as sufficient if they hav
 testing it; ask whether they tried it in the browser first. If the developer instead runs
 `/w-4-publish <TICKET-ID>` after reviewing, that skill performs step 10 itself.
 
+End the hand-off message with the URL to test on, as its own last line: the main stack,
+`http://localhost:3000`, plus the path of the page the change affects. Take the path from the
+testing instructions in `local-branch.md`, `qa-check.md`'s test plan or `change-notes.md`; failing
+those, from the frontend route that renders the changed components. No page found (a backend-only
+change, or the route is unclear) → print `http://localhost:3000` and say which screen to open
+instead of guessing a path. If `web-web-1` or `web-spa-1` is not running
+(`docker ps --format '{{.Names}}'`), say so above the URL and suggest `make start`.
+
 ## 10. Commit on approval
 
 Only ever stage the ticket's own files — the ticket's file list from step 9 plus any file the
@@ -197,14 +205,14 @@ the report.
   - Working tree has the developer's edits → fold them into the tip commit:
     `git commit --amend --no-edit` (or `--amend` without `--no-edit` to edit the message).
 - Either way, if the developer changed anything, append a short `## Post-review edits` section to
-  `.jira-plans/<TICKET-ID>/change-notes.md` — one to three bullets describing what they changed
+  `.ai-workspace/jira-plans/<TICKET-ID>/change-notes.md` — one to three bullets describing what they changed
   versus the pipeline's version (diff the pipeline commit, `pipeline_commit:` or the pre-amend tip
   `HEAD@{1}`, against the new tip). Add a bullet for step 5's conflict resolution too when there
   was one. `/w-4-publish` carries the updated file into the PR body.
 
 ## 11. Flip the status
 
-Update `.jira-plans/<TICKET-ID>/local-branch.md`: set `status: ready-for-push` and drop the
+Update `.ai-workspace/jira-plans/<TICKET-ID>/local-branch.md`: set `status: ready-for-push` and drop the
 `pipeline_commit:` and `rebase_assessment:` fields. Keep `pr_url:` if present — that's how `/w-4-publish` knows to update
 and un-draft the existing PR instead of opening a second one. This is what makes the ticket
 eligible for `/w-4-publish` (or `/w-4-1-fast-track-push-to-release`) going forward.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# Lists every ticket the pipeline has state for — .jira-plans/<T>/ and/or
-# .claude/worktrees/<T> — with its local-branch.md status, whether the
+# Lists every ticket the pipeline has state for — .ai-workspace/jira-plans/<T>/ and/or
+# .ai-workspace/worktrees/<T> — with its local-branch.md status, whether the
 # worktree still exists, and whether its PR is merged (via gh). With --apply,
 # removes the worktree, the plan directory and the pipeline-logs entries of
 # every ticket whose PR is merged. Dry-run by default.
@@ -26,9 +26,9 @@ for arg in "$@"; do
 done
 
 REPO_ROOT="$(resolve_repo_root)"
-PLANS_DIR="$REPO_ROOT/.jira-plans"
-WORKTREES_DIR="$REPO_ROOT/.claude/worktrees"
-LOGS_DIR="$REPO_ROOT/.claude/pipeline-logs"
+PLANS_DIR="$REPO_ROOT/.ai-workspace/jira-plans"
+WORKTREES_DIR="$REPO_ROOT/.ai-workspace/worktrees"
+LOGS_DIR="$REPO_ROOT/.ai-workspace/pipeline-logs"
 
 tickets="$( (ls "$PLANS_DIR" 2>/dev/null; ls "$WORKTREES_DIR" 2>/dev/null) \
   | grep -E '^XWWP-[0-9]+$' | sort -u)"
@@ -91,7 +91,7 @@ for t in $MERGED; do
     # Same exclusions as run-ticket-pipeline.sh: the scaffolding it copies in
     # is untracked there and would make every worktree look dirty.
     if [ -n "$(git -C "$WORKTREES_DIR/$t" status --porcelain -- . \
-        ':!.jira-plans' ':!.claude' ':!.mcp.json' ':!flags.json' \
+        ':!.ai-workspace' ':!.claude' ':!.mcp.json' ':!flags.json' \
         ':!.codex' ':!.cursor' ':!.agents' ':!AGENTS.md' 2>/dev/null)" ]; then
       echo "Skipping $t: worktree has uncommitted changes." >&2
       continue

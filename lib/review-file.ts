@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { REPO_ROOT, cached, readText, run, type Cached } from './util.ts';
+import { WORKSPACE_DIR, cached, readText, run, type Cached } from './util.ts';
 
 export type ReviewRow = { index: number; path: string; line: number | null; body: string; publish: boolean | null };
 export type ReviewTable = { hasPublishColumn: boolean; rows: ReviewRow[]; noIssues: boolean };
@@ -26,7 +26,7 @@ export function parseReviewTable(text: string): ReviewTable {
   return { hasPublishColumn, rows, noIssues: /^No issues found\.?$/m.test(text) };
 }
 
-export const reviewFilePath = (pr: number) => path.join(REPO_ROOT, '.pr-reviews', `PR-${pr}`, 'review.md');
+export const reviewFilePath = (pr: number) => path.join(WORKSPACE_DIR, 'pr-reviews', `PR-${pr}`, 'review.md');
 
 export async function setPublishFlags(pr: number, flags: Record<string, boolean>): Promise<ReviewTable | null> {
   const file = reviewFilePath(pr);

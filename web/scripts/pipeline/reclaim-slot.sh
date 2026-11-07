@@ -10,7 +10,7 @@
 # Usage: ./reclaim-slot.sh <repo-root> <ticket-id>
 #
 # Prints the reclaimed slot number (which may differ from the one held before
-# release) and updates .claude/pipeline-slots/.owner-<TICKET-ID>.
+# release) and updates .ai-workspace/pipeline-slots/.owner-<TICKET-ID>.
 
 set -euo pipefail
 
@@ -25,7 +25,7 @@ fi
 
 REPO_ROOT="$1"
 TICKET_ID="$2"
-SLOTS_DIR="$REPO_ROOT/.claude/pipeline-slots"
+SLOTS_DIR="$REPO_ROOT/.ai-workspace/pipeline-slots"
 
 mkdir -p "$SLOTS_DIR"
 

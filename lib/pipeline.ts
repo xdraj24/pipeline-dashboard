@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { REPO_ROOT, exists, listDir, normalizeTicket, readText, run, statMtime, TICKET_RE_G } from './util.ts';
+import { REPO_ROOT, WORKSPACE_DIR, exists, listDir, normalizeTicket, readText, run, statMtime, TICKET_RE_G } from './util.ts';
 
 export type StageEvent = { ticket: string; stage: string; state: 'in progress' | 'done' | 'failed' | 'skipped' | 'retrying' | 'complete' | 'other'; raw: string };
 export type RunTicket = { ticket: string; logPath: string; logMtime: string | null; logBytes: number; exitCode: number | null; stages: StageEvent[]; failedAt: string | null; running: boolean };
@@ -10,7 +10,7 @@ export type Worktree = { path: string; name: string; ticket: string | null; bran
 export type HeadlessAgent = { pid: number; elapsed: string; host: string; ticket: string | null; phase: string | null; command: string };
 export type LocalBranch = { name: string; ticket: string; sha: string; committedAt: string; isCurrent: boolean };
 
-const SCAFFOLD = ['.jira-plans', '.claude', '.mcp.json', 'flags.json', '.codex', '.cursor', '.agents', 'AGENTS.md'];
+const SCAFFOLD = ['.ai-workspace', '.claude', '.mcp.json', 'flags.json', '.codex', '.cursor', '.agents', 'AGENTS.md'];
 
 export function parseProgressLine(line: string): StageEvent | null {
   const m = line.match(/^\[(XWWP-\d+)\]\s+(.*)$/i);
@@ -65,7 +65,7 @@ function stagesFromTicketLog(ticket: string, log: string): StageEvent[] {
 }
 
 export async function readSlots(): Promise<Slot[]> {
-  const dir = path.join(REPO_ROOT, '.claude', 'pipeline-slots');
+  const dir = path.join(WORKSPACE_DIR, 'pipeline-slots');
   const out: Slot[] = [];
   for (const n of await listDir(dir)) {
     if (!/^\d+$/.test(n)) continue;
@@ -94,7 +94,7 @@ export async function readHeadlessAgents(): Promise<HeadlessAgent[]> {
 }
 
 export async function readRuns(limit = 30): Promise<PipelineRun[]> {
-  const dir = path.join(REPO_ROOT, '.claude', 'pipeline-logs');
+  const dir = path.join(WORKSPACE_DIR, 'pipeline-logs');
   const ids = (await listDir(dir)).filter((n) => /^\d{8}T\d{6}Z$/.test(n)).sort().reverse().slice(0, limit);
   const slots = await readSlots();
   const runs: PipelineRun[] = [];
@@ -108,15 +108,17 @@ export async function readRuns(limit = 30): Promise<PipelineRun[]> {
     for (const f of files.filter((n) => /^XWWP-\d+\.log$/i.test(n))) {
       const ticket = normalizeTicket(f.replace(/\.log$/i, ''));
       const logPath = path.join(rdir, f);
-      const st = await fs.stat(logPath);
+      // Run logs symlink into the ticket's worktree, which prune removes.
+      const st = await fs.stat(logPath).catch(() => fs.lstat(logPath));
       const statusText = await readText(path.join(rdir, `${ticket}.status`));
       const exitCode = statusText === null ? null : Number(statusText.trim());
       let stages = progressEvents.filter((e) => e.ticket === ticket);
       if (!stages.length) stages = stagesFromTicketLog(ticket, (await readText(logPath)) ?? '');
-      const failed = [...stages].reverse().find((e) => e.state === 'failed');
       const recentlyWritten = Date.now() - st.mtime.getTime() < 20 * 60 * 1000;
       const running = exitCode === null && (slots.some((s) => s.ticket === ticket) || recentlyWritten);
       stages = settleStages(collapseStages(stages), exitCode, running);
+      const last = [...stages].reverse().find((e) => e.state === 'failed' || e.state === 'complete' || e.state === 'done');
+      const failed = last?.state === 'failed' ? last : null;
       tickets.push({ ticket, logPath, logMtime: st.mtime.toISOString(), logBytes: st.size, exitCode, stages, failedAt: failed?.stage ?? null, running });
     }
     const startedAt = `${id.slice(0, 4)}-${id.slice(4, 6)}-${id.slice(6, 8)}T${id.slice(9, 11)}:${id.slice(11, 13)}:${id.slice(13, 15)}Z`;
@@ -180,4 +182,21 @@ export async function readLocalBranches(): Promise<LocalBranch[]> {
     if (t) res.push({ name, ticket: normalizeTicket(t[0]), sha, committedAt: date, isCurrent: name === current });
   }
   return res;
+}
+
+export type QaStack = { url: string; source: string | null; branch: string | null; sha: string | null; at: string | null; lockedBy: string | null };
+
+// Mirrors stack 3 in the web repo's scripts/pipeline/stack.sh.
+const QA_STACK_URL = 'http://qa.localhost:5100';
+
+export function parseStackDeployed(text: string, lockedBy: string | null): QaStack {
+  const field = (k: string) => text.match(new RegExp(`^${k}: (.+)$`, 'm'))?.[1].trim() ?? null;
+  return { url: QA_STACK_URL, source: field('source'), branch: field('branch'), sha: field('sha'), at: field('at'), lockedBy };
+}
+
+export async function readQaStack(): Promise<QaStack | null> {
+  const git = path.join(process.env.WEB_STACK3_DIR ?? path.join(path.dirname(REPO_ROOT), 'web-3rd'), '.git');
+  const deployed = await readText(path.join(git, 'stack-deployed'));
+  if (deployed === null) return null;
+  return parseStackDeployed(deployed, (await readText(path.join(git, 'stack-lock', 'owner')))?.trim() || null);
 }

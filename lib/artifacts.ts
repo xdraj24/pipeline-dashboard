@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { parseReviewTable } from './review-file.ts';
 import {
-  REPO_ROOT, bullets, findSection, listDir, normalizeTicket, parseFrontmatter, readText, sections, statMtime, TICKET_RE,
+  WORKSPACE_DIR, bullets, findSection, listDir, normalizeTicket, parseFrontmatter, readText, sections, statMtime, TICKET_RE,
 } from './util.ts';
 
 export type Todo = { text: string; done: boolean };
@@ -10,7 +10,7 @@ export type Models = { reviewer: string; fixer: string; planner: string; qa: str
 
 export type PlanArtifact = {
   path: string; mtime: string | null; frontmatter: Record<string, string>; title: string | null; summary: string | null;
-  todos: Todo[]; ticked: number; total: number; risks: string[]; implementationLog: string[]; filesToTouch: string[];
+  todos: Todo[]; ticked: number; total: number; risks: string[]; implementationLog: string[]; filesToTouch: string[]; manualChecks: string[];
 };
 export type CodeReviewArtifact = {
   path: string; mtime: string | null; frontmatter: Record<string, string>; status: string; rounds: number | null;
@@ -43,6 +43,7 @@ export function extractModels(text: string): Models {
     if (b) return b[1].toLowerCase();
     const c = text.match(new RegExp(`${role}[^.\\n]{0,40}?\\bran (?:on|by|with)\\s+(${MODEL_WORDS.source})`, 'i'));
     if (c) return c[1].toLowerCase();
+    if (new RegExp(`${role}\\s*[:=]\\s*not used`, 'i').test(text)) return 'not used';
     return 'unknown';
   };
   return { reviewer: pick('reviewer'), fixer: pick('fixer'), planner: pick('planner'), qa: pick('qa'), mentions };
@@ -68,6 +69,7 @@ async function readPlan(file: string): Promise<PlanArtifact | null> {
     todos, ticked: todos.filter((t) => t.done).length, total: todos.length,
     risks: bullets(findSection(secs, /risks|open questions/i)),
     implementationLog: bullets(findSection(secs, /implementation log/i)),
+    manualChecks: bullets(findSection(secs, /^manual checks/i)),
     filesToTouch: bullets(findSection(secs, /files to touch/i)),
   };
 }
@@ -130,11 +132,16 @@ async function readLocalBranch(file: string): Promise<LocalBranchArtifact | null
 }
 
 export async function readTicketArtifacts(ticket: string): Promise<TicketArtifacts> {
-  const dir = path.join(REPO_ROOT, '.jira-plans', ticket);
-  const files = await listDir(dir);
+  const mainDir = path.join(WORKSPACE_DIR, 'jira-plans', ticket);
+  // A running ticket writes into its worktree; finish-ticket.sh copies the folder back to main only at the end.
+  const worktreeDir = path.join(WORKSPACE_DIR, 'worktrees', ticket, '.ai-workspace', 'jira-plans', ticket);
+  const [mainFiles, worktreeFiles] = await Promise.all([listDir(mainDir), listDir(worktreeDir)]);
+  const dir = worktreeFiles.length ? worktreeDir : mainDir;
+  const files = [...new Set([...worktreeFiles, ...mainFiles])];
+  const at = (name: string) => path.join(worktreeFiles.includes(name) ? worktreeDir : mainDir, name);
   const [plan, codeReview, qaCheck, changeNotes, localBranch] = await Promise.all([
-    readPlan(path.join(dir, 'plan.md')), readCodeReview(path.join(dir, 'code-review.md')), readQaCheck(path.join(dir, 'qa-check.md')),
-    readChangeNotes(path.join(dir, 'change-notes.md')), readLocalBranch(path.join(dir, 'local-branch.md')),
+    readPlan(at('plan.md')), readCodeReview(at('code-review.md')), readQaCheck(at('qa-check.md')),
+    readChangeNotes(at('change-notes.md')), readLocalBranch(at('local-branch.md')),
   ]);
   const known = new Set(['plan.md', 'code-review.md', 'qa-check.md', 'change-notes.md', 'local-branch.md']);
   const mtimes = [plan, codeReview, qaCheck, changeNotes, localBranch].map((a) => a?.mtime).filter((m): m is string => !!m).sort();
@@ -145,7 +152,7 @@ export async function readTicketArtifacts(ticket: string): Promise<TicketArtifac
 }
 
 export async function listPlannedTickets(): Promise<string[]> {
-  return (await listDir(path.join(REPO_ROOT, '.jira-plans'))).filter((n) => TICKET_RE.test(n)).map(normalizeTicket);
+  return (await listDir(path.join(WORKSPACE_DIR, 'jira-plans'))).filter((n) => TICKET_RE.test(n)).map(normalizeTicket);
 }
 
 export function collectAssumptions(a: TicketArtifacts): Assumption[] {
@@ -165,7 +172,7 @@ export type PrReviewFile = {
 };
 
 export async function readPrReviews(): Promise<{ candidates: Record<string, string> | null; candidatesRows: string[]; reviews: PrReviewFile[] }> {
-  const dir = path.join(REPO_ROOT, '.pr-reviews');
+  const dir = path.join(WORKSPACE_DIR, 'pr-reviews');
   const names = await listDir(dir);
   const reviews: PrReviewFile[] = [];
   for (const n of names.filter((x) => /^PR-\d+$/i.test(x))) {

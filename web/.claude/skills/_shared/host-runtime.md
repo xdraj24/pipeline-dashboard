@@ -4,12 +4,13 @@ The `w-*` skills are plain instructions in the Agent Skills format. They run unc
 Code, Codex CLI and Cursor CLI; any other agent can open a `SKILL.md` and follow it. Everything
 host-specific is described here, once, and the skills refer to the concepts below by name.
 
-`.claude/skills/`, `.agents/`, `.codex/`, `scripts/pipeline/`, `docs/second-dev-stack.md` and
+The w-* skills, `_shared`, `.codex/`, `scripts/pipeline/`, `docs/second-dev-stack.md` and
 `.mcp.json` are not part of the web repo. They live in the `pipeline-dashboard` repo (next to the
 web checkout) and are absolute symlinks into it, created by its `bin/link-web.sh` (`/w-setup` runs
-it). `AGENTS.md` is a local file that `/w-setup` creates or enriches from that repo's root
-`AGENTS.md`. `link-web.sh` lists all of them, and the skills' local state (`.jira-plans/`,
-`.pr-reviews/`, `.claude/pipeline-*`, `.claude/worktrees/`), in the web clone's
+it). `.claude/skills/` itself is a real folder holding one link per w-* skill, so skills other
+developers commit to the web repo sit beside them; a committed skill with the same name as a w-*
+skill wins and is not linked. `.agents/skills` is a local link to `../.claude/skills`. `AGENTS.md` is a local file that `/w-setup` creates or enriches from that repo's root
+`AGENTS.md`. `link-web.sh` lists all of them, and the skills' local state (`.ai-workspace/`), in the web clone's
 `.git/info/exclude`, so they never show in `git status` and never reach the web remote.
 Edit skills in place; commit and push them from the pipeline-dashboard repo.
 
@@ -38,6 +39,32 @@ Everything after the skill name in the message that invoked the skill. Claude Co
 the token before you see it; on every other host read the invoking message yourself. Empty when
 nothing followed the skill name.
 
+### `ticket_pattern`, `jira_browse`, `release_branch_pattern`, `dev_docker_image`
+
+The Jira project, browse URL, release-branch form, and dev image belong to the checkout these
+skills run in. Read only these keys from the repo root `.env`:
+
+```bash
+grep -E '^(ticket_pattern|jira_browse|release_branch_pattern|dev_docker_image)=' "$(git rev-parse --show-toplevel)/.env"
+```
+
+A key missing there falls back to the same line in `.env.example`. Still missing → ask the
+developer. Do not assume a project key, host, release form, or image, and do not print any other
+line of `.env`.
+
+Strip one surrounding pair of single or double quotes from the value.
+
+- `ticket_pattern` — regex for one ticket id. A token is a ticket id when it matches,
+  case-insensitively; uppercase the key before using it.
+- `jira_browse` — browse URL with no trailing slash. A ticket's URL is
+  `<jira_browse>/<TICKET-ID>`.
+- Project key — the literal text of `ticket_pattern` before the first `-`. Use it for
+  `project = <key>` and `projectKey`.
+- `release_branch_pattern` — regex for a release branch, the `release/rXXX` form (`[0-9]+` is
+  the `XXX`). A branch matches with or without a leading `origin/`. The latest is the match
+  with the highest trailing number.
+- `dev_docker_image` — image name for `docker image inspect` before a local `make build`.
+
 ### "Invoke `/w-x <args>`"
 
 Run that skill with those arguments, in this session, and continue with its report:
@@ -60,6 +87,25 @@ plain message with the options numbered. Batch related questions; never drip-fee
 Claude Code's names for the Atlassian and Slack MCP servers' tools. Other hosts expose the same
 servers under their own naming (Codex and Cursor usually drop the `mcp__<server>__` prefix). Treat
 each name as "the described operation on that server", not as a literal string.
+
+### JIRA attachments
+
+The Atlassian MCP server returns text/ADF only and cannot upload or fetch attachments. Use the
+REST helper, which reads `JIRA_EMAIL` / `JIRA_API_TOKEN` from the pipeline-dashboard `.env`
+(`/w-setup` step 4). Resolve it through the `_shared` link so it also works in a ticket worktree:
+
+```bash
+JA="$(cd -P "$(git rev-parse --show-toplevel)/.claude/skills/_shared/../../.." && pwd)/scripts/pipeline/jira-attachments.sh"
+"$JA" list     <TICKET-ID>            # id, mime type, bytes, filename
+"$JA" download <TICKET-ID> <dir>      # prints each saved path
+"$JA" upload   <TICKET-ID> <file>...  # prints id, bytes, filename per upload
+```
+
+After `download`, open each image or PDF with your file-reading tool, which renders them, and
+work from what it actually shows. Video and other binaries you cannot view stay unknown: name
+them as an open question rather than guessing. If the helper exits non-zero because credentials
+are missing, fall back to the "you cannot see attachments" behavior the calling skill describes
+and say why in the report.
 
 ### "Deferred tools"
 
@@ -98,10 +144,12 @@ role. The prompt is always written out in the skill; the role only says how to r
 | Role | Used by | Claude Code | Codex | Purpose |
 |---|---|---|---|---|
 | planner | `w-1-coding` plan phase | `Agent`, `subagent_type: "Plan"`, `model: "opus"`; one per ticket in the same message | spawn `w-planner`, one per ticket, in parallel | strong model, read-only |
-| reviewer | `w-1-coding` code-review phase, `w-21-review-prs` | `Agent`, `subagent_type: "general-purpose"`, `model: "opus"` | spawn `w-reviewer` | strong model, never the one that wrote or fixes the code |
+| implementer | `w-1-coding` implement and commit phases in `supervised` mode | `Agent`, `subagent_type: "general-purpose"`, `model: "sonnet"` | n/a (`supervised` is Claude Code only) | writes code; the reviewer is a different model |
+| checker | linter seat of `review-panel.md` (`w-1-coding` code-review phase, `w-21-review-prs`) | `Agent`, `subagent_type: "general-purpose"`, `model: "sonnet"` | spawn `w-checker` | runs lint, type checks, tests and coverage in check mode; never edits |
+| reviewer | every other seat of `review-panel.md` (`w-1-coding` code-review phase, `w-21-review-prs`) | `Agent`, `subagent_type: "general-purpose"`, `model: "opus"` | spawn `w-reviewer` | strong model, never the one that wrote or fixes the code |
 | fixer | `w-1-coding` code-review and qa-check phases | `Agent`, `subagent_type: "general-purpose"`, `model: "sonnet"` | spawn `w-fixer` | fast model, writes code |
-| qa | `w-1-coding` qa-check phase | `Agent`, `subagent_type: "general-purpose"`, `model: "opus"` | spawn `w-qa` | strong model, staff-level QA; runs tests, probes and the browser pass, never fixes |
-| verifier | `w-22-verify-review-comments` | `Agent`, `subagent_type: "general-purpose"`, `model: "sonnet"` | spawn `w-verifier` | a different model from the reviewer |
+| qa | testers of `qa-testers.md` (`w-1-coding` qa-check phase, `w-21-review-prs`) | `Agent`, `subagent_type: "general-purpose"`, `model: "opus"` | spawn `w-qa` | strong model, staff-level QA; runs tests, probes and the browser pass, never fixes |
+| verifier | `w-21-review-prs` | `Agent`, `subagent_type: "general-purpose"`, `model: "sonnet"` | spawn `w-verifier` | a different model from the reviewer |
 
 Rules for every host that can delegate:
 
@@ -122,6 +170,15 @@ Agent Teams are deliberately not used: Claude Code's experimental teams can't be
 (the pipeline is built to survive clearing and quitting), and the review/fix loop is sequential,
 which the teams docs call an anti-pattern. Subagents cover the fan-out cases; the bash pipeline
 covers the detached ones. Reviewed 2026-10-10.
+
+## Supervised runs (Claude Code)
+
+`supervised`, the default mode of `/w-1-coding` and `/w-10-sprint-batch` in an interactive Claude
+Code session, keeps the coordinator in the main session instead of detaching a bash pipeline:
+background subagents do every phase in the ticket worktrees, and questions and stalls come back
+to the main session. `supervised-run.md` is the procedure. It needs `Agent`, `SendMessage`,
+`TaskStop` and `Monitor`, so on Codex, Cursor or under `PIPELINE_MODE=unattended` the default
+stays `background`. The session must stay open until the batch reports.
 
 ## The unattended pipeline per host
 

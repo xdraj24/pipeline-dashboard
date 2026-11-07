@@ -1,7 +1,7 @@
 ---
 name: w-7-attach-pr-visuals
 description: Capture screenshots and a GIF of a PR's UI changes with Playwright (and Chrome automation in Claude Code) and attach them to the PR's Screenshots/Recordings section. Use to add visual evidence to an open PR.
-argument-hint: "<XWWP-XXXX|PR-link-or-number>"
+argument-hint: "<TICKET-ID|PR-link-or-number>"
 model: sonnet
 effort: high
 ---
@@ -25,7 +25,7 @@ endpoint for uploading inline images, so the browser drop is the only way to get
 hands the files to the developer to attach by hand; steps 6 and 7 say exactly what to do.
 
 Argument: `$ARGUMENTS` — required, one of:
-- An XWWP ticket id (e.g. `XWWP-1551`).
+- A ticket id matching `ticket_pattern` (`host-runtime.md`).
 - A GitHub PR URL.
 - A bare PR number (resolved against this repo's `origin`).
 
@@ -42,7 +42,7 @@ As `.claude/skills/_shared/resolve-pr.md` describes; the `gh pr view` fields nee
 ## 1b. Reuse the QA screenshots when they exist
 
 Ticket id known (from the argument or the PR's branch/title) and
-`.jira-plans/<TICKET-ID>/screenshots/index.md` exists → the qa-check phase of `/w-1-coding`
+`.ai-workspace/jira-plans/<TICKET-ID>/screenshots/index.md` exists → the qa-check phase of `/w-1-coding`
 already captured the change working on the QA stack. Skip steps 2–6: the files listed in
 `index.md` are the media, its captions are the descriptions. Go to step 7.
 

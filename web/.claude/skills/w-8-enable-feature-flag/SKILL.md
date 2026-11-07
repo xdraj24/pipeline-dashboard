@@ -1,7 +1,7 @@
 ---
 name: w-8-enable-feature-flag
 description: Turn a Web feature flag on (or change it) in a deployed environment (stg, pre, app) by editing AWS AppConfig's flag list in the nv-infrastructure repo, then branch, commit, push and open its PR. Use when a flag that exists in web's backend/flags.json has to be enabled outside localhost.
-argument-hint: "<flag_name> <stg|pre|app>[,...] [XWWP-XXXX] [users=a@x.com,b@x.com]"
+argument-hint: "<flag_name> <stg|pre|app>[,...] [<TICKET-ID>] [users=a@x.com,b@x.com]"
 model: sonnet
 effort: medium
 ---
@@ -72,7 +72,7 @@ not required for a `cdk.json`-only change.
 
 ## 4. Branch, commit, push, PR
 
-- Branch: `feature/<TICKET-ID>-<flag-slug>-flag` (e.g. `feature/XWWP-4814-downloads-v2-flag`);
+- Branch: `feature/<TICKET-ID>-<flag-slug>-flag` (e.g. `feature/<TICKET-ID>-downloads-v2-flag`);
   without a ticket, `feature/<flag-slug>-flag` or `feature/<flag-slug>-<env>` for a rollout change.
 - Commit, in the repo's style: `feat(appconfig): add DOWNLOADS_V2 flag for the Web app` (or
   `feat(appconfig): open <FLAG> to all of stg`, `chore(appconfig): ...`). Body: what the flag gates

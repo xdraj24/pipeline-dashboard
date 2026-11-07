@@ -2,12 +2,12 @@
 
 Input from `SKILL.md`: one or more validated, de-duplicated ticket ids.
 
-Plans are saved under `.jira-plans/<TICKET-ID>/plan.md` at the repo root. That folder is
-gitignored (see `.gitignore`) — it is local scratch space, never pushed.
+Plans are saved under `.ai-workspace/jira-plans/<TICKET-ID>/plan.md` at the repo root. That folder is
+excluded from git through `.git/info/exclude` (set up by `link-web.sh`) — it is local scratch space, never pushed.
 
 ## This phase is re-entrant
 
-Load state first: for every ticket id, check whether `.jira-plans/<TICKET-ID>/plan.md` already
+Load state first: for every ticket id, check whether `.ai-workspace/jira-plans/<TICKET-ID>/plan.md` already
 exists and read its `## To-do` list. That list is the state. On a return visit, don't re-ask
 anything already recorded in `plan.md`: carry forward its ticked to-do items, its answered risks,
 and its `## Implementation Log` rather than regenerating them.
@@ -19,7 +19,7 @@ and its `## Implementation Log` rather than regenerating them.
 - **Multiple tickets** → one planner per ticket, all in parallel (same message), so they run
   concurrently instead of one after another.
 
-For each ticket, delegate this self-contained prompt (fill in the real ticket id) to the
+For each ticket, delegate this self-contained prompt (fill in the real ticket id and the concrete `jira_browse` URL from `host-runtime.md`) to the
 **planner** role as `.claude/skills/_shared/host-runtime.md` § Delegation roles describes for
 your host, and wait for every planner to return. A host without delegation does the planning
 pass itself, following the same prompt as its own instructions:
@@ -28,14 +28,14 @@ pass itself, following the same prompt as its own instructions:
 > `mcp__atlassian__getAccessibleAtlassianResources` first if you don't have the cloud id yet).
 > Read its summary, description, and acceptance criteria.
 >
-> The Atlassian MCP tools return text/ADF fields only — no tool here can fetch attachment binary
-> content. If the description or comments reference a screenshot, recording, video, or other
-> attached file (an inline image marker, a filename, "see attached", a Loom/video link, etc.), you
-> cannot see what it shows. Do not guess its content or plan around an assumption of what it
-> contains. Instead, add a bullet to "Risks / Open questions" naming the attachment (its filename
-> or description as it appears on the ticket) and stating plainly that the developer needs to
-> provide it — paste its content, describe it in text, or drop the file under
-> `.jira-plans/<TICKET-ID>/` — before that part of the plan can be trusted.
+> Download the ticket's attachments with the helper in
+> `.claude/skills/_shared/host-runtime.md` § JIRA attachments, into
+> `.ai-workspace/jira-plans/<TICKET-ID>/attachments/`, and open every image and PDF so that the
+> plan reflects what they show. Anything you still cannot see (a video, a Loom or other external
+> link, an unsupported format, or every attachment if the helper failed) must not be guessed at.
+> Add a bullet to "Risks / Open questions" naming it as it appears on the ticket and stating
+> plainly that the developer needs to describe it, or drop a viewable copy under
+> `.ai-workspace/jira-plans/<TICKET-ID>/`, before that part of the plan can be trusted.
 >
 > Then explore this Rails + React + Go monorepo (see the root, `frontend/` and `backend/app/`
 > `CLAUDE.md` files for conventions) to find the files and areas the ticket touches.
@@ -50,7 +50,7 @@ pass itself, following the same prompt as its own instructions:
 > title: <jira summary, short>
 > type: <jira issue type>
 > branch_prefix: <"bugfix" if issue type is Bug, else "feature">
-> jira_url: https://welligence.atlassian.net/browse/<TICKET-ID>
+> jira_url: <jira_browse>/<TICKET-ID>
 > ---
 >
 > # <TICKET-ID> — <short title>
@@ -72,7 +72,13 @@ pass itself, following the same prompt as its own instructions:
 > ## To-do
 > - [ ] One checkbox per unit of work, in execution order, covering every Approach step and every
 >       test above. Leave them all unchecked: the implement phase ticks them as it goes, and a
->       returning session resumes from the first unchecked box.
+>       returning session resumes from the first unchecked box. Only work the implement phase can
+>       finish without a browser (code, tests, commands); checks in the running app go under
+>       Manual checks.
+>
+> ## Manual checks
+> - What to verify in the running app, one line each, no checkbox (qa-check's browser pass covers
+>   these; "None" when the change has no UI or runtime behaviour to see)
 >
 > ## Risks / Open questions
 > - Anything ambiguous in the ticket, or a decision the developer should confirm
@@ -85,7 +91,7 @@ pass itself, following the same prompt as its own instructions:
 
 Once all agent(s) return:
 
-- Ensure `.jira-plans/` exists (create it if not).
+- Ensure `.ai-workspace/jira-plans/` exists (create it if not).
 - Before writing each ticket's plan, look at its "Risks / Open questions" section. For any item
   that's genuinely **blocking** — the implementation can't proceed sensibly without a human
   decision, not just something informational worth flagging — ask the developer via
@@ -99,7 +105,7 @@ Once all agent(s) return:
   reply; don't let the plan silently proceed without it. Handle tickets one at a time for this
   step even if multiple were planned in parallel above.
 - For each ticket with no existing plan, write its agent's returned text verbatim to
-  `.jira-plans/<TICKET-ID>/plan.md` (create the ticket subfolder if needed).
+  `.ai-workspace/jira-plans/<TICKET-ID>/plan.md` (create the ticket subfolder if needed).
 - If a plan already exists for that ticket, this is a refresh, not a reset. Merge: keep the ticked
   to-do items, the answers already recorded under "Risks / Open questions", and any
   `## Implementation Log` section. Only untick or rewrite a to-do item whose work the refreshed

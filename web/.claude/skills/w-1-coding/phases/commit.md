@@ -48,7 +48,7 @@ Follow the steps below **in order**. Do not skip the JIRA validation step.
 Branch name format:
 
 ```
-<prefix>/XWWP-<number>-<page-area>-<sub-area>-<short-fix-description>
+<prefix>/<TICKET-ID>-<page-area>-<sub-area>-<short-fix-description>
 ```
 
 - `<prefix>`: `feature/` or `bugfix/` from step 1 (per repo convention in CLAUDE.md).
@@ -60,7 +60,7 @@ Branch name format:
 - **Keep the whole branch name short** — everything lowercase, dash-separated, roughly
   ≤ 60 characters total. Prefer dropping words over exceeding this.
 
-Example: `feature/XWWP-1551-smart-reports-view-and-pdf-title-alignment`
+Example: `feature/<TICKET-ID>-smart-reports-view-and-pdf-title-alignment`
 
 - If already on a branch matching this ticket id, stay on it (don't create a second branch for
   the same ticket).
@@ -75,7 +75,7 @@ failures and do not commit. Fix them only if the developer asks.
 
 ## 5. Write the change notes
 
-Write `.jira-plans/<TICKET-ID>/change-notes.md` (overwrite if it exists — this is a refresh).
+Write `.ai-workspace/jira-plans/<TICKET-ID>/change-notes.md` (overwrite if it exists — this is a refresh).
 This is the document the developer reads before the diff when they land the branch, and
 `/w-4-publish` appends it verbatim as the last section of the PR body (draft and final alike). It
 exists because the code itself carries almost no comments: everything a reviewer would otherwise
@@ -100,8 +100,8 @@ branch: <branch-name>
   from the plan's "Risks / Open questions", the Implementation Log in plan.md, and this phase.
 - Every question asked via Slack, with the answer verbatim or the fallback phrasing the shared doc
   describes.
-- Minor review findings deliberately left unfixed (from code-review.md), and open QA findings
-  plus the browser line from `qa-check.md`, if any.
+- The `## Won't fix` and `## Follow-up bugs` entries from `code-review.md` and `qa-check.md`,
+  open QA findings, and the browser line from `qa-check.md`, if any.
 ```
 
 Sources to draw from: `plan.md` (Summary, Risks / Open questions, Implementation Log),
@@ -115,7 +115,7 @@ and "None" for the other two is a valid file for a trivial ticket.
   dashes to spaces with sensible capitalization. Example:
 
   ```
-  XWWP-1551 Smart Reports view and PDF title alignment
+  <TICKET-ID> Smart Reports view and PDF title alignment
   ```
 
 - Only if it genuinely adds information, append one short extra sentence on a second paragraph.
@@ -131,7 +131,7 @@ and "None" for the other two is a valid file for a trivial ticket.
 
 ## 7. Record local-branch state
 
-Write `.jira-plans/<TICKET-ID>/local-branch.md` (create the ticket folder if needed; overwrite if
+Write `.ai-workspace/jira-plans/<TICKET-ID>/local-branch.md` (create the ticket folder if needed; overwrite if
 it already exists — this is a refresh; keep any `pr_url:` and other fields a later skill added). This file is how `/w-4-publish` discovers branches that are
 ready to publish, so keep it accurate:
 
@@ -140,7 +140,7 @@ ready to publish, so keep it accurate:
 ticket: <TICKET-ID>
 branch: <branch-name>
 status: ready-for-push
-jira_url: https://welligence.atlassian.net/browse/<TICKET-ID>
+jira_url: <jira_browse>/<TICKET-ID>
 commit_title: <the commit message first line>
 commit_description: <the extra sentence from step 6, or "None">
 ---
@@ -157,7 +157,7 @@ PDF — Title Alignment" — reused verbatim by /w-4-publish for the PR body>
 to verify>
 ```
 
-**Under `PIPELINE_MODE=unattended`** (set by `scripts/pipeline/run-ticket-pipeline.sh`): write
+**Under `PIPELINE_MODE=unattended` or `supervised`** (set in the worktree's `pipeline.env`): write
 `status: ready-for-review` instead of `status: ready-for-push` — this branch went through the
 pipeline unattended and always needs a human pass via `/w-3-land-branch` before `/w-4-publish`
 is allowed to open a non-draft PR for it. (`/w-4-publish <TICKET-ID> draft`, which the pipeline
@@ -169,4 +169,4 @@ Summarize: files changed, tests run and their result, the branch name, the commi
 was amended), and the path to `change-notes.md`. Do **not** push — suggest the next step: with no
 `qa-check.md` yet, `/w-1-coding <TICKET-ID> just-qa-check`; otherwise `/w-4-publish <branch-name>`
 (or `/w-4-publish` with no argument to see all branches ready to be picked up). **Under
-`PIPELINE_MODE=unattended`**, suggest `/w-3-land-branch <TICKET-ID>` instead.
+`PIPELINE_MODE=unattended` or `supervised`**, suggest `/w-3-land-branch <TICKET-ID>` instead.

@@ -6,8 +6,9 @@ are in scope and what to do with files the linters modify; this doc says how to 
 ## Container working directory
 
 The dev containers (`web-spa-1`, `web-web-1`) mount the main checkout at `/app`. A pipeline
-worktree is a different directory on the same mount (`/app/.claude/worktrees/<TICKET-ID>`), and
-`scripts/pipeline/run-ticket-pipeline.sh` exports it as `PIPELINE_CONTAINER_WORKDIR`. Every
+worktree is a different directory on the same mount (`/app/.ai-workspace/worktrees/<TICKET-ID>`), and
+`scripts/pipeline/prepare-worktree.sh` writes it to the worktree's `.ai-workspace/pipeline.env`
+as `PIPELINE_CONTAINER_WORKDIR`. Every
 `-w` below uses `${PIPELINE_CONTAINER_WORKDIR:-/app}` — a bare `/app/frontend` from inside a
 worktree lints and tests `main`, not the branch.
 
@@ -19,13 +20,13 @@ W="${PIPELINE_CONTAINER_WORKDIR:-/app}"
 
 ## Is a pipeline worktree clean?
 
-`run-ticket-pipeline.sh` copies `.jira-plans/`, `.claude/skills/`, `.mcp.json`, `flags.json`
+`prepare-worktree.sh` copies `.ai-workspace/jira-plans/`, `.claude/skills/`, `.mcp.json`, `flags.json`
 and the other hosts' config (`.codex/`, `.cursor/`, `.agents`, `AGENTS.md`) into every worktree,
 and none of them are tracked, so a bare `git status --porcelain` there is never empty. Any skill
 that asks whether a worktree is clean uses the same pathspec the pipeline scripts use:
 
 ```bash
-git -C .claude/worktrees/<TICKET-ID> status --porcelain -- . ':!.jira-plans' ':!.claude' ':!.mcp.json' ':!flags.json' ':!.codex' ':!.cursor' ':!.agents' ':!AGENTS.md'
+git -C .ai-workspace/worktrees/<TICKET-ID> status --porcelain -- . ':!.ai-workspace' ':!.claude' ':!.mcp.json' ':!flags.json' ':!.codex' ':!.cursor' ':!.agents' ':!AGENTS.md'
 ```
 
 Empty output means clean.

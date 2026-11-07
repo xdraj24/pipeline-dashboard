@@ -5,6 +5,14 @@ business questions, "which branch?" pickers, "tested it?" gates, confirmation be
 GitHub or editing a JIRA ticket, all of it. One channel, not two. The only difference between
 callers is what they do when nobody answers (see the calling skill's own step for its default).
 
+## Supervised agents don't ask
+
+Under `PIPELINE_MODE=supervised` you are a subagent of a coordinator session
+(`supervised-run.md`). Skip everything below: post nothing to Slack or the dashboard, don't poll,
+don't touch slots. Stop and end your final message with the `NEEDS-INPUT` block from
+`supervised-run.md` § 2. The coordinator asks the developer through this doc's interactive path
+and resumes you with the answer.
+
 ## Is Slack set up?
 
 Slack is set up when both hold:
@@ -38,11 +46,11 @@ goes there too, whether or not Slack is set up, in every mode. It is file-based,
 the server is down: the question waits as a JSON file under `<dashboard>/data/questions/` until
 the page is opened.
 
-The skills are a symlink into that repo, so the dashboard folder is found through them, from the
-main checkout or a worktree alike:
+Each w-* skill folder (and `_shared`) is a symlink into that repo, so the dashboard folder is
+found through one of them, from the main checkout or a worktree alike:
 
 ```bash
-DASH="$(cd -P "$(git rev-parse --show-toplevel)/.claude/skills/../../.." && pwd)"
+DASH="$(cd -P "$(git rev-parse --show-toplevel)/.claude/skills/_shared/../../../.." && pwd)"
 ```
 
 Skip the channel silently if `$DASH/bin/ask.sh` does not exist.
