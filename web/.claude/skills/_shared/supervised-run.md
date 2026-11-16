@@ -127,7 +127,8 @@ failure fails the ticket at that stage.
      finishes, in rank order.
    - Do § 1 and § 2 (pick the testers) yourself. No tester → write `qa-check.md` as § 2 says
      and move on. Browser picked → § 3 from the main checkout, syncing the worktree:
-     `"$S" sync 3 <WORKTREE>`; both testers' driver is Playwright; hold the lock until the
+     `"$S" sync 3 <WORKTREE>`; drivers and the login check as § 3 Driver says for the supervised
+     coordinator (functional on Chrome, regression on Playwright); hold the lock until the
      artifact is written, and unlock on every outcome.
    - Spawn the picked testers in one message: preamble + the § 4a prompt for each.
      `<shots dir>` is under `<WORKTREE>/.ai-workspace/qa-shots/round-<n>/`.

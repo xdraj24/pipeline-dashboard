@@ -131,8 +131,9 @@ exhaust the stage's turn budget.
 
 ### Browser automation
 
-Only Claude Code has the `claude-in-chrome` tools, and only in an interactive session (a
-headless pipeline stage has neither the extension nor the tools on its allow-list).
+Only Claude Code has the `claude-in-chrome` tools, and only in an interactive session, the
+supervised coordinator included (a headless pipeline stage has neither the extension nor the
+tools on its allow-list).
 `w-7-attach-pr-visuals` and the `w-1-coding` qa-check phase say what every other case does
 instead (Playwright against the local dev server, with the repo's own login setup).
 

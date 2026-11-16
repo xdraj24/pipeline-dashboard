@@ -64,7 +64,9 @@ preamble** with the caller's **environment block** filled in, followed by that t
 > - Browser mode `driver`: watch the console and failed network requests
 >   (`read_console_messages` / `read_network_requests` in Chrome; `page.on('console')` /
 >   `page.on('requestfailed')` in Playwright). Never trigger a native `alert`, `confirm` or
->   `prompt`. Mode `handover`: don't open a browser; write each browser case as path on the app
+>   `prompt`. The app shows its login page, or Playwright's `login(page)` fails → never log in
+>   yourself or report it as a finding: stop the browser cases, mark them "not run" and add a
+>   `LOGIN REQUIRED: <URL>` line to your report; the conductor asks the developer. Mode `handover`: don't open a browser; write each browser case as path on the app
 >   URL, steps, and expected result, for the developer. Mode `none` or a driver that fails: mark
 >   the browser cases "not run"; never pretend.
 >

@@ -81,12 +81,18 @@ stack, which only serves the main checkout.
 **Driver**, when the pass runs. Only the functional tester drives Chrome; the regression tester
 always uses Playwright, so the two never fight over one browser:
 
-- Claude Code without `PIPELINE_MODE`: the `claude-in-chrome` tools — load them with
+- Claude Code without `PIPELINE_MODE`, or as the `PIPELINE_MODE=supervised` coordinator (an
+  interactive session): Chrome, always. Load the `claude-in-chrome` tools with
   `ToolSearch` (`select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__read_page,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__find,mcp__claude-in-chrome__form_input,mcp__claude-in-chrome__read_console_messages,mcp__claude-in-chrome__read_network_requests,mcp__claude-in-chrome__tabs_create_mcp`),
-   call `tabs_context_mcp` first and open a new tab for the app URL. On the QA stack Chrome may
-  land on the login page (its cookies are per host): ask the developer to log in there once, via
-  `.claude/skills/_shared/slack-escalation.md`. `browser: chrome`.
-- Every other case (`PIPELINE_MODE` set, Codex, Cursor): Playwright runs from the pipeline-dashboard repo's `tools/playwright/` (installed by
+  call `tabs_context_mcp` first and open a new tab for the app URL. Before spawning any tester,
+  check the login yourself: the tab lands on `/login` or a sign-in form (Chrome's cookies are per
+  host, so each stack needs its own login), or the tools fail to load or reach the extension →
+  ask the developer via `.claude/skills/_shared/slack-escalation.md` to log in to `<app URL>` in
+  Chrome (or connect the Claude in Chrome extension), with the options "logged in" and "skip the
+  browser pass". Wait for the answer, reload the tab and check again; repeat until the app shows
+  a logged-in page. Never fall back to Playwright here. Only an explicit "skip" gives
+  `browser: skipped (developer skipped login)`. `browser: chrome`.
+- Every other case (`PIPELINE_MODE=unattended`, Codex, Cursor): Playwright runs from the pipeline-dashboard repo's `tools/playwright/` (installed by
   `/w-setup`; `DASH` as in `.claude/skills/_shared/slack-escalation.md`), not from the web repo:
   write the ad hoc spec to `$DASH/tools/playwright/tmp/<TICKET-ID>-<slug>.spec.ts` (never under
   the web repo's `tests/`), start each test with `await login(page)` imported from `../login.ts`,
@@ -94,9 +100,10 @@ always uses Playwright, so the two never fight over one browser:
   `BASE_URL=<app URL>`. It caps the run (default 240 s), kills Playwright's whole process group
   on a hang and deletes the spec, so write a fresh spec per run. Keep each spec to one or two
   tests with `test.setTimeout` of 150 s or less, and append a heartbeat before every run. `login.ts` takes `BASE_USER` / `BASE_PASSWORD`, else the main
-  checkout's `playwright.env.local.json` (the seeded `admin_end_to_end@welligence.com`). Neither
-  → `browser: blocked (no test credentials)`; interactively, ask the developer via
-  `.claude/skills/_shared/slack-escalation.md` before settling for that. `browser: playwright`.
+  checkout's `playwright.env.local.json` (the seeded `admin_end_to_end@welligence.com`). Neither,
+  or `login(page)` fails → `browser: blocked (no test credentials)`; whenever anyone can answer
+  (not unattended), ask the developer via `.claude/skills/_shared/slack-escalation.md` for working
+  credentials before settling for that. `browser: playwright`.
 
 ## 4. Run the loop (round = 1)
 
@@ -123,6 +130,9 @@ Spawn the testers picked in step 2 as `qa-testers.md` § 2 says, with this envir
 >   <reason>`.
 
 ### b. Triage
+
+A tester reported `LOGIN REQUIRED` → ask the developer to log in again exactly as step 3's
+Driver says, then re-run that tester's browser cases (same round) before triaging.
 
 `qa-testers.md` § 3. A stack artefact includes step 3's item 5 (no S3 on the QA stack). No finding
 triaged **fix** left at blocker or major → step 5. Otherwise step c.
