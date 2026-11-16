@@ -1,8 +1,8 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { DATA_DIR, REPO_ROOT, WORKSPACE_DIR, listDir, normalizeTicket, parseFrontmatter, readText, TICKET_RE } from './util.ts';
+import { DATA_DIR, REPO_ROOT, WORKSPACE_DIR, envValue, listDir, normalizeTicket, parseFrontmatter, readText, TICKET_RE } from './util.ts';
 
-export const ARCHIVE_JIRA_STATUSES = ["QC'd on STG", 'Delivered IN APP.WELLIGENCE'];
+export const ARCHIVE_JIRA_STATUSES = envValue('ARCHIVE_JIRA_STATUSES')?.split(',').map((s) => s.trim()).filter(Boolean) ?? ["QC'd on STG", 'Delivered IN APP.WELLIGENCE'];
 export const ARCHIVE_DIR = path.join(DATA_DIR, 'archive');
 
 export type Archived = { at: string; reason: string; file: string };

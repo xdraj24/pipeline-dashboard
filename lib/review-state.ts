@@ -13,13 +13,13 @@ export type ReviewCard = ReviewPr & { bucket: 'queue' | 'mine' | 'others' | 'app
 export type ReviewState = {
   generatedAt: string; repo: Cached<string>; viewer: Cached<string>; gh: Cached<{ ok: boolean; detail: string }>;
   open: { loading: boolean; error: string | null; fetchedAt: string | null; drafts: number; mine: number };
-  small: { maxLines: number; maxFiles: number };
+  small: { maxLines: number; maxFiles: number }; jira: JiraConfig;
   queue: ReviewCard[]; mine: ReviewCard[]; others: ReviewCard[]; sessions: SkillSession[];
   approved: { loading: boolean; error: string | null; fetchedAt: string | null; prs: (ApprovedPr & { draft: PrReviewFile | null })[] };
 };
 
 export async function buildReviewState(): Promise<ReviewState> {
-  const [files, launches, allSessions] = await Promise.all([readPrReviews(), listLaunches(), readSkillSessions()]);
+  const [files, launches, allSessions, jira] = await Promise.all([readPrReviews(), listLaunches(), readSkillSessions(), jiraConfig()]);
   const sessions = allSessions.filter((s) => /^w-2\d-/.test(s.skill) && (s.state !== 'finished' || Date.now() - new Date(s.finishedAt!).getTime() < 12 * 3600_000));
   const open = openPrsForReview();
   const approved = approvedByMe();
@@ -40,7 +40,7 @@ export async function buildReviewState(): Promise<ReviewState> {
   return {
     generatedAt: new Date().toISOString(), repo: repoSlug(), viewer: viewerLogin(), gh: ghStatus(),
     open: { loading: open.loading, error: open.error, fetchedAt: open.fetchedAt, drafts: open.value?.drafts ?? 0, mine: open.value?.mine ?? 0 },
-    small: { maxLines: SMALL_MAX_LINES, maxFiles: SMALL_MAX_FILES },
+    small: { maxLines: SMALL_MAX_LINES, maxFiles: SMALL_MAX_FILES }, jira,
     queue: cards.filter((c) => c.bucket === 'queue').sort(byUpdated),
     mine: cards.filter((c) => c.bucket === 'mine').sort(byUpdated),
     others: cards.filter((c) => c.bucket === 'others').sort(byUpdated), sessions,

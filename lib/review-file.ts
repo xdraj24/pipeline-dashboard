@@ -7,15 +7,25 @@ export type ReviewTable = { hasPublishColumn: boolean; rows: ReviewRow[]; noIssu
 export type Snippet = { startLine: number; focus: number; lines: string[]; ref: string };
 
 const CELL_SPLIT = /(?<!\\)\|/;
-const isRow = (l: string) => /^\|\s*`/.test(l);
+const isHeader = (l: string) => /^\|\s*File:Line\s*\|/i.test(l);
+const isSeparator = (l: string) => /^\|\s*:?-{3,}/.test(l);
 const splitCells = (l: string) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split(CELL_SPLIT).map((c) => c.trim().replace(/\\\|/g, '|'));
+
+function rowIndexes(lines: string[]): Set<number> {
+  const out = new Set<number>();
+  const start = lines.findIndex(isHeader);
+  if (start < 0) return out;
+  for (let i = start + 1; i < lines.length && lines[i].trim().startsWith('|'); i++) if (!isSeparator(lines[i].trim())) out.add(i);
+  return out;
+}
 
 export function parseReviewTable(text: string): ReviewTable {
   const lines = text.split(/\r?\n/);
-  const header = lines.find((l) => /^\|\s*File:Line\s*\|/i.test(l));
+  const header = lines.find(isHeader);
   const hasPublishColumn = !!header && /\|\s*Publish\s*\|\s*$/i.test(header);
   const rows: ReviewRow[] = [];
-  for (const l of lines.filter(isRow)) {
+  for (const i of rowIndexes(lines)) {
+    const l = lines[i];
     const cells = splitCells(l);
     const ref = cells[0].replace(/`/g, '');
     const colon = ref.lastIndexOf(':');
@@ -35,11 +45,13 @@ export async function setPublishFlags(pr: number, flags: Record<string, boolean>
   const nl = text.includes('\r\n') ? '\r\n' : '\n';
   const lines = text.split(/\r?\n/);
   const current = parseReviewTable(text);
+  const rowLines = rowIndexes(lines);
+  const headerIdx = lines.findIndex(isHeader);
   let rowIdx = -1;
-  const out = lines.map((l) => {
-    if (/^\|\s*File:Line\s*\|/i.test(l)) return current.hasPublishColumn ? l : `${l.trimEnd()} Publish |`;
-    if (/^\|\s*-{3,}/.test(l)) return current.hasPublishColumn ? l : `${l.trimEnd()}---|`;
-    if (!isRow(l)) return l;
+  const out = lines.map((l, i) => {
+    if (i === headerIdx) return current.hasPublishColumn ? l : `${l.trimEnd()} Publish |`;
+    if (i === headerIdx + 1 && isSeparator(l)) return current.hasPublishColumn ? l : `${l.trimEnd()}---|`;
+    if (!rowLines.has(i)) return l;
     rowIdx++;
     const cells = splitCells(l).map((c) => c.replace(/\|/g, '\\|'));
     const prev = current.rows[rowIdx]?.publish ?? false;

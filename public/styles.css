@@ -83,7 +83,7 @@ main { padding: 12px 16px 32px; display: flex; flex-direction: column; gap: 12px
 .seg.warn, .sw.warn { background: var(--warn); border-color: var(--warn); color: var(--navy); }
 .seg.question, .sw.question { background: var(--white); border-color: var(--bad); color: var(--bad); }
 .seg.failed, .sw.failed { background: var(--bad); border-color: var(--bad); color: var(--white); }
-.seg.skipped, .sw.skipped { opacity: .5; }
+.seg.skipped, .sw.skipped { background: var(--ok); border-color: var(--ok); color: var(--white); opacity: .45; }
 @keyframes wgpulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 
 .nb { flex: none; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 1px 5px; border: 1px solid; text-align: center; min-width: 46px; }

@@ -5,7 +5,7 @@ import { buildState } from './lib/state.ts';
 import { readTicketArtifacts } from './lib/artifacts.ts';
 import { readRuns, tailFile } from './lib/pipeline.ts';
 import { answerQuestion, createQuestion, getQuestion, listQuestions, patchQuestion } from './lib/questions.ts';
-import { DASHBOARD_DIR, REPO_ROOT, WORKSPACE_DIR, clearCache, readText } from './lib/util.ts';
+import { DASHBOARD_DIR, REPO_ROOT, WORKSPACE_DIR, TICKET_ID, clearCache, readText } from './lib/util.ts';
 import { repoSlug, viewerLogin } from './lib/github.ts';
 import { getLaunch, launch, listLaunches, stopLaunch } from './lib/launch.ts';
 import { buildReviewDetail, buildReviewState, detailComments } from './lib/review-state.ts';
@@ -25,7 +25,7 @@ const readBody = (req: http.IncomingMessage): Promise<any> => new Promise((resol
   req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch (e) { reject(e); } });
   req.on('error', reject);
 });
-const TICKET = /^XWWP-\d+$/i;
+const TICKET = new RegExp(`^${TICKET_ID}$`, 'i');
 const ARTIFACTS = new Set(['plan.md', 'code-review.md', 'qa-check.md', 'change-notes.md', 'local-branch.md']);
 
 async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {

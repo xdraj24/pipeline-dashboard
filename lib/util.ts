@@ -4,16 +4,20 @@ import path from 'node:path';
 
 export const DASHBOARD_DIR = path.resolve(import.meta.dirname, '..');
 
-function webRootFromEnvFile(): string | undefined {
+export function envValue(key: string): string | undefined {
+  if (process.env[key]) return process.env[key];
+  let text: string;
   try {
-    return readFileSync(path.join(DASHBOARD_DIR, '.env'), 'utf8').match(/^WEB_REPO_ROOT=(.+)$/m)?.[1].trim();
+    text = readFileSync(path.join(DASHBOARD_DIR, '.env'), 'utf8');
   } catch {
     return undefined;
   }
+  const m = text.match(new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=\\s*(.*?)\\s*$`, 'm'));
+  return m?.[1].replace(/^["']|["']$/g, '') || undefined;
 }
 
 export const REPO_ROOT = path.resolve(
-  process.env.PIPELINE_REPO_ROOT ?? process.env.WEB_REPO_ROOT ?? webRootFromEnvFile() ?? path.join(DASHBOARD_DIR, '..', 'web'),
+  process.env.PIPELINE_REPO_ROOT ?? envValue('WEB_REPO_ROOT') ?? path.join(DASHBOARD_DIR, '..', 'web'),
 );
 export const WORKSPACE_DIR = path.join(REPO_ROOT, '.ai-workspace');
 export const DATA_DIR = path.join(DASHBOARD_DIR, 'data');
@@ -148,6 +152,9 @@ export function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Cac
   };
 }
 
-export const TICKET_RE = /\bXWWP-\d+\b/i;
-export const TICKET_RE_G = /\bXWWP-\d+\b/gi;
+export const TICKET_PREFIX = (envValue('TICKET_PREFIX') ?? 'XWWP').toUpperCase();
+if (!/^[A-Z][A-Z0-9_]*$/.test(TICKET_PREFIX)) throw new Error(`TICKET_PREFIX must be a JIRA project key, got "${TICKET_PREFIX}"`);
+export const TICKET_ID = `${TICKET_PREFIX}-\\d+`;
+export const TICKET_RE = new RegExp(`\\b${TICKET_ID}\\b`, 'i');
+export const TICKET_RE_G = new RegExp(`\\b${TICKET_ID}\\b`, 'gi');
 export const normalizeTicket = (t: string) => t.toUpperCase();

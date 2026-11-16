@@ -28,7 +28,8 @@ second web stack (PR review, `/w-24-land-branch-for-review`) and the third (QA).
 
 Local web app that watches what the `w-*` skills and the unattended pipeline leave on disk in the
 web checkout (`../web`, or `WEB_REPO_ROOT` in `.env`), plus the matching GitHub PR and JIRA
-status, and suggests the next command per ticket. It also carries questions from the skills to
+status, and suggests the next command per ticket. Tickets are keys of the JIRA project
+`TICKET_PREFIX` in `.env` (default `XWWP`). It also carries questions from the skills to
 you and your answers back (see "Questions").
 
 ## Run
@@ -53,7 +54,7 @@ Node 22.18+ (type stripping, no dependencies). `PORT=5000 node server.ts` change
 | `.ai-workspace/jira-plans/<T>/local-branch.md` | status, branch, pr_url, release / cherry-pick PRs |
 | `.ai-workspace/pipeline-logs/<run>/` | stage timeline (`progress.log`, one chip per stage pass: its `in progress` line is folded into the `done`/`FAILED` line that follows), per-ticket log tail, exit codes |
 | `.ai-workspace/pipeline-slots/`, `ps` | which tickets are running right now and in which phase |
-| `git worktree list`, `refs/heads/*XWWP-*` | worktrees, dirty files, local branches |
+| `git worktree list`, `refs/heads/*<TICKET_PREFIX>-*` | worktrees, dirty files, local branches |
 | `gh api graphql` | PR state, draft, approvals, unresolved threads, comments since last push, CI |
 | JIRA REST (`JIRA_EMAIL` + `JIRA_API_TOKEN` in this repo's `.env`) | ticket status, type, assignee, sprint |
 | `.ai-workspace/pr-reviews/` | reviews drafted and verified by `/w-21`, published by `/w-23` |
@@ -71,8 +72,8 @@ the browser. Uncovered cards are dashed, carry a `sprint · mine` chip, and sugg
 command.
 
 Every suggested command has three buttons. `copy` (or clicking the command) copies it. `▶ run`
-spawns `claude --permission-mode dontAsk --allowedTools "mcp__atlassian__*,mcp__slack__*" -p
-"<command>"` from the repo root, the same invocation the pipeline uses, with `PIPELINE_REPO_ROOT`
+spawns `claude --permission-mode dontAsk --allowedTools "Bash,Edit,Write,Read,Glob,Grep,Agent,Skill,ToolSearch,mcp__atlassian__*,mcp__slack__*"
+-p "<command>"` from the repo root, the same invocation the pipeline uses, with `PIPELINE_REPO_ROOT`
 set so questions reach this page; output goes to `data/launches/<id>.log` and shows in the card's
 "Launch log" tab and the "Skills launched from this page" section, with a stop button. `terminal`
 opens Terminal.app with an interactive `claude "<command>"` instead. Only a single `/w-*`
@@ -82,7 +83,7 @@ invocation is accepted; one running launch per ticket.
 
 `/history` lists archived tickets; the board hides them. A ticket is archived automatically once
 its PR is merged (for a fast-tracked hotfix: the release PR and the cherry-pick PR) and its JIRA
-status is one of `ARCHIVE_JIRA_STATUSES` in `lib/archive.ts` ("QC'd on STG",
+status is one of `ARCHIVE_JIRA_STATUSES` (comma-separated in `.env`, default "QC'd on STG",
 "Delivered IN APP.WELLIGENCE"). Archiving writes `archived: <ISO time>` and `archived_reason:`
 into the frontmatter of `.ai-workspace/jira-plans/<TICKET>/plan.md` (mtime preserved). A ticket with no plan
 folder gets the marker in `data/archive/<TICKET>.md` instead. Delete the two lines (or the side

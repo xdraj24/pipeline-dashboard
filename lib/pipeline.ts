@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { REPO_ROOT, WORKSPACE_DIR, exists, listDir, normalizeTicket, readText, run, statMtime, TICKET_RE_G } from './util.ts';
+import { REPO_ROOT, WORKSPACE_DIR, exists, listDir, normalizeTicket, readText, run, statMtime, TICKET_ID, TICKET_RE_G } from './util.ts';
 
 export type StageEvent = { ticket: string; stage: string; state: 'in progress' | 'done' | 'failed' | 'skipped' | 'retrying' | 'complete' | 'other'; raw: string };
 export type RunTicket = { ticket: string; logPath: string; logMtime: string | null; logBytes: number; exitCode: number | null; stages: StageEvent[]; failedAt: string | null; running: boolean };
@@ -13,7 +13,7 @@ export type LocalBranch = { name: string; ticket: string; sha: string; committed
 const SCAFFOLD = ['.ai-workspace', '.claude', '.mcp.json', 'flags.json', '.codex', '.cursor', '.agents', 'AGENTS.md'];
 
 export function parseProgressLine(line: string): StageEvent | null {
-  const m = line.match(/^\[(XWWP-\d+)\]\s+(.*)$/i);
+  const m = line.match(new RegExp(`^\\[(${TICKET_ID})\\]\\s+(.*)$`, 'i'));
   if (!m) return null;
   const rest = m[2];
   const st = rest.match(/^([\w-]+):\s*(.*)$/);
@@ -105,7 +105,7 @@ export async function readRuns(limit = 30): Promise<PipelineRun[]> {
     const progress = progressPath ? (await readText(progressPath)) ?? '' : '';
     const progressEvents = progress.split(/\r?\n/).map(parseProgressLine).filter((e): e is StageEvent => !!e);
     const tickets: RunTicket[] = [];
-    for (const f of files.filter((n) => /^XWWP-\d+\.log$/i.test(n))) {
+    for (const f of files.filter((n) => new RegExp(`^${TICKET_ID}\\.log$`, 'i').test(n))) {
       const ticket = normalizeTicket(f.replace(/\.log$/i, ''));
       const logPath = path.join(rdir, f);
       // Run logs symlink into the ticket's worktree, which prune removes.

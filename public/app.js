@@ -146,7 +146,7 @@ function renderBoard() {
 
 function renderHistory() {
   const list = state.archived;
-  const head = `<div class="grp-head"><span class="eyebrow">Archived · ${list.length}</span><span class="desc ellipsis">PR merged and JIRA reached "QC'd on STG" or "Delivered IN APP.WELLIGENCE"; plan.md frontmatter carries an archived: line</span></div>`;
+  const head = `<div class="grp-head"><span class="eyebrow">Archived · ${list.length}</span><span class="desc ellipsis">PR merged and JIRA reached ${state.jira.archiveStatuses.map((s) => `"${esc(s)}"`).join(' or ')}; plan.md frontmatter carries an archived: line</span></div>`;
   if (!list.length) { $('#tickets').innerHTML = `<div class="panel">${head}<div class="empty">Nothing archived yet. A ticket lands here once its PR is merged and JIRA reaches one of the archive statuses.</div></div>`; return; }
   $('#tickets').innerHTML = `<div class="panel">${head}<div class="grid-wrap"><table class="grid fixed"><colgroup><col style="width:96px"><col style="width:34%"><col style="width:110px"><col style="width:76px"><col style="width:26%"><col></colgroup><tr><th>Ticket</th><th>Title</th><th>JIRA</th><th>Archived</th><th>Local branch</th><th>Next step</th></tr>${list.map((t) => {
     const branch = t.artifacts.localBranch?.branch ?? t.branches[0]?.name;

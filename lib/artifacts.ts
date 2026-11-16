@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { parseReviewTable } from './review-file.ts';
 import {
-  WORKSPACE_DIR, bullets, findSection, listDir, normalizeTicket, parseFrontmatter, readText, sections, statMtime, TICKET_RE,
+  WORKSPACE_DIR, bullets, findSection, listDir, normalizeTicket, parseFrontmatter, readText, sections, statMtime, TICKET_ID, TICKET_RE,
 } from './util.ts';
 
 export type Todo = { text: string; done: boolean };
@@ -64,7 +64,7 @@ async function readPlan(file: string): Promise<PlanArtifact | null> {
   const h1 = body.match(/^#\s+(.+)$/m);
   return {
     path: file, mtime: await statMtime(file), frontmatter: data,
-    title: data.title ?? (h1 ? h1[1].replace(/^XWWP-\d+\s*[—–-]\s*/, '') : null),
+    title: data.title ?? (h1 ? h1[1].replace(new RegExp(`^${TICKET_ID}\\s*[—–-]\\s*`, 'i'), '') : null),
     summary: (findSection(secs, /^summary/i) ?? '').trim() || null,
     todos, ticked: todos.filter((t) => t.done).length, total: todos.length,
     risks: bullets(findSection(secs, /risks|open questions/i)),

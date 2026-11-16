@@ -7,7 +7,7 @@ let detailTimer = null;
 
 const readFilters = () => { try { return JSON.parse(localStorage.getItem('reviewFilters') || '{}'); } catch { return {}; } };
 const saveFilters = (f) => { try { localStorage.setItem('reviewFilters', JSON.stringify(f)); } catch {} };
-let filters = { small: false, area: null, hideBots: false, ...readFilters() };
+let filters = { small: false, area: null, hideBots: false, author: null, ...readFilters() };
 
 async function load() {
   try {
@@ -18,7 +18,7 @@ async function load() {
   }
 }
 
-const matches = (p) => (!filters.small || p.small) && (!filters.area || p.area === filters.area) && (!filters.hideBots || !p.authorIsBot);
+const matches = (p) => (!filters.small || p.small) && (!filters.area || p.area === filters.area) && (!filters.hideBots || !p.authorIsBot) && (!filters.author || p.author === filters.author);
 
 const areaTitle = (p) => `frontend ${p.lines.fe} · backend ${p.lines.be} · other ${p.lines.other} changed lines${p.changedFiles > 100 ? ' (first 100 files only)' : ''}`;
 const areaChip = (p) => pill(p.area === 'frontend' ? 'active' : p.area === 'backend' ? 'ok' : '', p.area, areaTitle(p));
@@ -80,7 +80,7 @@ function card(p) {
   if (mine && p.commentsSinceMine) extras.push(pill('warn', `${p.commentsSinceMine} new comment(s)`));
   if (mine && p.pushedSinceMine) extras.push(pill('warn', `pushed ${ago(p.lastCommitAt)}`));
   const chips = [...extras, sessionChip(p), launchChip(p)].filter(Boolean).join('');
-  const ticket = p.ticket ? `<a href="https://welligence.atlassian.net/browse/${p.ticket}" target="_blank">${p.ticket}</a>` : 'no ticket';
+  const ticket = p.ticket ? `<a href="https://${state.jira.site}/browse/${p.ticket}" target="_blank">${p.ticket}</a>` : 'no ticket';
   return `<div class="row ${p.next.label === 'publish' ? 'ok' : ''} ${detailPr === p.number ? 'selected' : ''}" data-pr="${p.number}" title="Click for ticket details and the review file">
     <div class="row-main">
       <div class="row-top"><div class="row-title ellipsis" title="${esc(`${p.headRefName} → ${p.baseRefName}`)}"><a class="id" href="${p.url}" target="_blank">#${p.number}</a> ${esc(p.title)}</div><span class="row-age" title="last updated">${ago(p.updatedAt)}</span></div>
@@ -112,7 +112,7 @@ function renderApproved() {
   if (!a.prs.length) { $('#approved').innerHTML = `<div class="empty">${a.loading ? 'Loading…' : 'No PR carries your approval.'}</div>`; return; }
   $('#approved').innerHTML = `<div class="grid-wrap"><table class="grid"><tr><th>PR</th><th>Title</th><th>Author</th><th>JIRA</th><th>State</th><th>Updated</th><th>Local review</th></tr>${a.prs.map((p) => `<tr>
     <td><a href="${p.url}" target="_blank">#${p.number}</a></td><td class="clip"><a href="#" data-open-pr="${p.number}" title="${esc(p.title)}">${esc(p.title)}</a></td><td>${esc(p.author ?? '?')}</td>
-    <td>${p.ticket ? `<a href="https://welligence.atlassian.net/browse/${p.ticket}" target="_blank">${p.ticket}</a>` : '—'}</td>
+    <td>${p.ticket ? `<a href="https://${state.jira.site}/browse/${p.ticket}" target="_blank">${p.ticket}</a>` : '—'}</td>
     <td>${pill(p.state === 'MERGED' ? 'done' : p.state === 'CLOSED' ? 'bad' : 'ok', p.state === 'MERGED' ? `merged ${ago(p.mergedAt)}` : p.state === 'CLOSED' ? 'closed' : 'open · approved')}</td>
     <td class="muted">${ago(p.updatedAt)}</td><td>${p.draft ? draftChip(p.draft) + ' ' + previewBtn(p) : '—'}</td></tr>`).join('')}</table></div>`;
 }
@@ -142,6 +142,17 @@ function renderStatus() {
   ].join('');
   for (const b of document.querySelectorAll('[data-filter]')) b.classList.toggle('on', b.dataset.filter === 'small' ? filters.small : filters.area === b.dataset.filter);
   $('#hide-bots').checked = filters.hideBots;
+  renderAuthorFilter();
+}
+
+function renderAuthorFilter() {
+  const sel = $('#author-filter');
+  const authors = [...new Set([...state.queue, ...state.mine, ...state.others].map((p) => p.author).filter(Boolean))];
+  if (filters.author && !authors.includes(filters.author)) authors.push(filters.author);
+  authors.sort((a, b) => a.localeCompare(b));
+  const html = `<option value="">Anyone</option>${authors.map((a) => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}`;
+  if (sel.dataset.html !== html) { sel.innerHTML = html; sel.dataset.html = html; }
+  sel.value = filters.author ?? '';
 }
 
 function renderDetail() {
@@ -170,7 +181,7 @@ const fmDate = (iso) => iso ? `${new Date(iso).toLocaleString()} (${ago(iso)})` 
 function jiraSection(d) {
   const cfg = d.jira.config;
   const h = (extra = '') => `<span class="eyebrow grey">JIRA ${extra}</span>`;
-  if (!d.ticket) return `<div class="block">${h()}<span class="muted">No XWWP ticket in the PR title, branch or review file.</span></div>`;
+  if (!d.ticket) return `<div class="block">${h()}<span class="muted">No ${esc(cfg.ticketPrefix)} ticket in the PR title, branch or review file.</span></div>`;
   const link = `<a href="https://${cfg.site}/browse/${d.ticket}" target="_blank">${d.ticket}</a>`;
   if (!cfg.configured) return `<div class="block">${h(link)}<span class="muted">${pill('warn', 'JIRA off')} ${esc(cfg.reason)}</span></div>`;
   const c = d.jira.issue;
@@ -331,6 +342,7 @@ document.addEventListener('change', async (e) => {
   renderDetail(); load();
 });
 $('#hide-bots').addEventListener('change', (e) => { filters.hideBots = e.target.checked; saveFilters(filters); render(); });
+$('#author-filter').addEventListener('change', (e) => { filters.author = e.target.value || null; saveFilters(filters); render(); });
 $('#refresh').addEventListener('click', async () => { await fetch('/api/refresh', { method: 'POST' }); load(); });
 
 load();

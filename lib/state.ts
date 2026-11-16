@@ -151,7 +151,7 @@ function buildStages(v: Omit<TicketView, 'stages' | 'status' | 'nextStep' | 'mod
 
   const stages = [plan, impl, review, commit, qa, land, publish, reviewed, merged];
   settleRunningStages(stages, !!(run?.running || v.agents.length));
-  if (!a.plan && !a.localBranch && mainPr) for (const st of [plan, impl, review, commit, qa, land]) if (st.state === 'pending') st.state = 'skipped', st.detail = 'not run through the skills';
+  if (!a.plan && !a.localBranch && mainPr) for (const st of [plan, impl, review, commit, qa, land]) if (st.state === 'pending') st.state = 'skipped', st.detail = 'no local record: cleaned up by /w-4-publish, or never run through the skills';
   return stages;
 }
 

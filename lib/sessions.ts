@@ -13,7 +13,7 @@ const LOOKBACK_MS = 24 * 3600_000;
 const STALL_MS = 15 * 60_000;
 const parsed = new Map<string, { mtimeMs: number; session: SkillSession | null }>();
 
-function parseSession(file: string, text: string, mtime: Date): SkillSession | null {
+export function parseSession(file: string, text: string, mtime: Date): SkillSession | null {
   const lines = text.split('\n');
   let last: { idx: number; command: string; args: string; at: string; sessionId: string; cwd: string | null } | null = null;
   for (let i = 0; i < lines.length; i++) {
@@ -26,14 +26,22 @@ function parseSession(file: string, text: string, mtime: Date): SkillSession | n
   }
   if (!last) return null;
   let finishedAt: string | null = null; let summary: string | null = null; let toolCalls = 0;
+  const background = new Set<string>();
   for (let i = last.idx + 1; i < lines.length; i++) {
     if (!lines[i].startsWith('{"')) continue;
     let d: any;
     try { d = JSON.parse(lines[i]); } catch { continue; }
+    if (d.type === 'user') {
+      const r = d.toolUseResult;
+      if (r?.backgroundTaskId) background.add(r.backgroundTaskId);
+      if (r?.status === 'async_launched') background.add(r.agentId ?? r.taskId);
+      for (const n of lines[i].matchAll(/<task-id>([^<]+)<\/task-id>(?:(?!<\/task-notification>).)*?<status>/g)) background.delete(n[1]);
+      continue;
+    }
     if (d.type !== 'assistant') continue;
     const content = Array.isArray(d.message?.content) ? d.message.content : [];
     toolCalls += content.filter((c: any) => c.type === 'tool_use').length;
-    if (d.message?.stop_reason === 'end_turn') {
+    if (d.message?.stop_reason === 'end_turn' && !background.size) {
       finishedAt = d.timestamp ?? null;
       summary = content.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n').trim().slice(0, 400) || null;
     } else finishedAt = null;

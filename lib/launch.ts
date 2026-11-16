@@ -11,6 +11,8 @@ export type Launch = {
 
 export const LAUNCH_DIR = path.join(DATA_DIR, 'launches');
 const COMMAND_RE = /^\/w-[\w-]+( [^\n\r;&|`$<>]*)?$/;
+// Must match run_agent_headless in web/scripts/pipeline/lib.sh: dontAsk denies every tool not listed.
+export const HEADLESS_ALLOWED_TOOLS = 'Bash,Edit,Write,Read,Glob,Grep,Agent,Skill,ToolSearch,mcp__atlassian__*,mcp__slack__*';
 
 async function save(l: Launch): Promise<void> {
   await fs.mkdir(LAUNCH_DIR, { recursive: true });
@@ -81,7 +83,7 @@ export async function launch(opts: { ticket?: string | null; pr?: number | null;
   await fs.mkdir(LAUNCH_DIR, { recursive: true });
   l.logPath = path.join(LAUNCH_DIR, `${id}.log`);
   const fd = openSync(l.logPath, 'a');
-  const args = ['--permission-mode', 'dontAsk', '--allowedTools', 'mcp__atlassian__*,mcp__slack__*', '-p', command];
+  const args = ['--permission-mode', 'dontAsk', '--allowedTools', HEADLESS_ALLOWED_TOOLS, '-p', command];
   const child = spawn('claude', args, { cwd: REPO_ROOT, detached: true, stdio: ['ignore', fd, fd], env });
   closeSync(fd);
   child.unref();
