@@ -68,6 +68,26 @@ done
 
 [ -n "${SLACK_BOT_TOKEN:-}" ] || problem "SLACK_BOT_TOKEN is not exported (Slack escalation will be treated as not set up)"
 
+# The pre-commit RuboCop hook falls back to `docker run welligence/web:dev` when no
+# web container serves the checkout; a Ruby or gem drift there blocks every Ruby commit.
+ruby_version="$(tr -d '[:space:]' < "$REPO_ROOT/backend/.ruby-version" 2>/dev/null || true)"
+if [ -n "$ruby_version" ]; then
+  for dockerfile in Dockerfile.wlaude Dockerfile.test; do
+    base="$(sed -n 's/^FROM ruby:\([0-9.]*\).*/\1/p' "$REPO_ROOT/$dockerfile" 2>/dev/null | head -1)"
+    if [ -n "$base" ] && [ "$base" != "$ruby_version" ]; then
+      problem "$dockerfile uses ruby:$base but backend/.ruby-version is $ruby_version (make build fails in bundle install)"
+    fi
+  done
+  if command -v docker >/dev/null 2>&1 && docker image inspect welligence/web:dev >/dev/null 2>&1; then
+    image_ruby="$(docker run --rm welligence/web:dev ruby -e 'print RUBY_VERSION' 2>/dev/null || true)"
+    if [ "$image_ruby" != "$ruby_version" ]; then
+      problem "welligence/web:dev runs Ruby ${image_ruby:-unknown}, backend/.ruby-version is $ruby_version (rebuild the image)"
+    elif ! docker run --rm -v "$REPO_ROOT":/app -w /app/backend welligence/web:dev bundle check >/dev/null 2>&1; then
+      problem "welligence/web:dev is missing gems from backend/Gemfile.lock (rebuild the image; the RuboCop hook falls back to it)"
+    fi
+  fi
+fi
+
 case "$PIPELINE_AGENT" in
   claude)
     require_file .mcp.json && mcp_names_present .mcp.json

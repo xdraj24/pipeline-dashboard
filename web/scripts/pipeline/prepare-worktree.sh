@@ -48,6 +48,8 @@ REPO_ROOT="$(resolve_repo_root)"
 # this change is on origin/main.
 overlay_dev_hooks() {
   local repo_root="$1" worktree="$2" f
+  # origin/main has the fix once it ships the helper; an older checkout would downgrade it.
+  [ -f "$worktree/hooks/dev-container.sh" ] && return 0
   for f in hooks/rubocop.sh hooks/biome-check.sh hooks/graphql-codegen.sh; do
     [ -f "$repo_root/$f" ] || continue
     mkdir -p "$worktree/$(dirname "$f")"
@@ -59,6 +61,22 @@ overlay_dev_hooks() {
     fi
   done
 }
+check_rubocop_hook() {
+  local worktree="$1" probe="backend/config/application.rb" out
+  if [ ! -x "$worktree/hooks/rubocop.sh" ] || [ ! -f "$worktree/$probe" ]; then
+    return 0
+  fi
+  if ! out="$(cd "$worktree" && ./hooks/rubocop.sh "$probe" 2>&1)"; then
+    {
+      echo "PRE-COMMIT HOOK BROKEN: hooks/rubocop.sh fails in $worktree, so every Ruby commit in this run would fail."
+      printf '%s\n' "$out" | grep -E 'GemNotFound|Could not find|Your Ruby version|No such container|Error' | head -5
+      echo "Diagnosis and fixes: .claude/skills/_shared/run-checks.md § Pre-commit hook fails for an environment reason."
+    } >&2
+    return 1
+  fi
+  git -C "$worktree" checkout -- "$probe" 2>/dev/null || true
+}
+
 SLOTS_DIR="$REPO_ROOT/.ai-workspace/pipeline-slots"
 OWNER_FILE="$SLOTS_DIR/.owner-$TICKET_ID"
 mkdir -p "$SLOTS_DIR"
@@ -118,6 +136,12 @@ done
 # origin/main's hooks `docker run` an image whose gems lag Gemfile.lock.
 # Overlay this checkout's hooks and keep that diff out of the ticket commit.
 overlay_dev_hooks "$REPO_ROOT" "$WORKTREE"
+
+# A hook that can't run only surfaces at commit time, hours into a run.
+if ! check_rubocop_hook "$WORKTREE"; then
+  "$SCRIPT_DIR/release-slot.sh" "$REPO_ROOT" "$TICKET_ID" >&2 || true
+  exit 1
+fi
 
 # The dev containers mount the main checkout at /app, so the worktree is
 # visible inside them at this path (see .claude/skills/_shared/run-checks.md).

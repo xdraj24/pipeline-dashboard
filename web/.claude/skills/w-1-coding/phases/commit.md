@@ -120,7 +120,9 @@ and "None" for the other two is a valid file for a trivial ticket.
 
 - Only if it genuinely adds information, append one short extra sentence on a second paragraph.
 - Commit the ticket's files: `git add -A && git commit -m "<message>"` (pre-commit hooks will
-  run; if hooks modify files, stage and amend/retry the commit). If step 2 found unrelated
+  run; if hooks modify files, stage and amend/retry the commit). A hook that fails for an
+  environment reason rather than the code: `run-checks.md` § Pre-commit hook fails for an
+  environment reason; never `SKIP=` or `--no-verify`. If step 2 found unrelated
   pre-existing dirt, add the ticket's files explicitly instead of `-A` and leave the rest alone.
 - **Re-commit after qa-check** (or any other re-run): when `HEAD`'s subject already starts with
   `<TICKET-ID>` and the branch has no upstream (`git rev-parse --abbrev-ref @{upstream}` fails),

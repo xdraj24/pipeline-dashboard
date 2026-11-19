@@ -40,7 +40,10 @@ in `scripts/pipeline/lib.sh`) at a time; the rest wait until a running ticket fi
 
 It prints `SLOT=`, `WORKTREE=` and `CONTAINER_WORKDIR=`, and writes
 `<WORKTREE>/.ai-workspace/pipeline.env`. Non-zero exit with "No pipeline slot available" → queue
-the ticket and retry when a slot frees up; any other failure → the ticket fails at `prepare`.
+the ticket and retry when a slot frees up. "PRE-COMMIT HOOK BROKEN" → the environment, not the
+ticket: prepare nothing else, ask the developer with the lines it printed and the fix from
+`run-checks.md` § Pre-commit hook fails for an environment reason, and retry once they answer.
+Any other failure → the ticket fails at `prepare`.
 
 The heartbeat file is `<WORKTREE>/.ai-workspace/jira-plans/<TICKET-ID>/progress.log`. Before
 spawning each agent, append `<UTC time> coordinator: start <stage>` to it.

@@ -66,3 +66,23 @@ databases; when it isn't set, nothing is forwarded.
 - If Biome or RuboCop modified files, stage them; the calling skill says whether that means a
   new commit or an amend.
 - Skip a side entirely if the diff has no files for it.
+
+## Pre-commit hook fails for an environment reason
+
+The code passed the checks above, but `git commit` fails inside a hook. Never bypass it (`SKIP=`,
+`--no-verify`): find which case it is, then fix the environment or stop and ask.
+
+| Hook output | Cause | Fix |
+|---|---|---|
+| `Bundler::GemNotFound` / `Could not find <gem>` from `hooks/rubocop.sh` | The hook ran `docker run welligence/web:dev`, whose baked-in gems lag `backend/Gemfile.lock` | Rebuild the image (`make build`), then retry the commit |
+| `Your Ruby version is X, but your Gemfile specified Y` during `make build` | The `FROM ruby:` line in `Dockerfile.wlaude` moved without `backend/.ruby-version` and the Gemfile | Build from a copy pinned to `.ruby-version`, changing no repo file (command below) |
+| RuboCop or Biome reports files the diff doesn't touch, or misses the worktree's files | The hook linted `/app/...`, the main checkout, instead of the committing worktree | Lint the worktree with `run-checks.md` paths; ask the developer before committing |
+
+```bash
+sed "s/^FROM ruby:[0-9.]*-/FROM ruby:$(cat backend/.ruby-version)-/" Dockerfile.wlaude \
+  | docker buildx build -f - --platform linux/arm64 -t welligence/web:dev .
+```
+
+Under `PIPELINE_MODE` set, stop with `NEEDS-INPUT` naming the row and the fix; the developer
+decides whether to rebuild. `./scripts/pipeline/check-host.sh claude` and `prepare-worktree.sh`
+both catch the first two rows before a run starts.
